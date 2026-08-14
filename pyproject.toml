@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aegisflow"
+version = "0.1.0"
+description = "Evidence-driven, local-first source security audit agent"
+requires-python = ">=3.11"
+authors = [{ name = "AegisFlow Contributors" }]
+dependencies = [
+  "httpx>=0.28,<0.29",
+  "jinja2>=3.1,<3.2",
+  "pydantic>=2.11,<3",
+  "rich>=14,<15",
+  "tree-sitter>=0.24,<0.26",
+  "tree-sitter-javascript>=0.23,<0.26",
+  "tree-sitter-python>=0.23,<0.26",
+  "tree-sitter-typescript>=0.23,<0.24",
+  "typer>=0.16,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<9",
+  "pytest-cov>=6.2,<7",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+aegisflow = "aegisflow.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aegisflow"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
