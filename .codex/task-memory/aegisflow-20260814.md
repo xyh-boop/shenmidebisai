@@ -3,11 +3,11 @@
 - task_id: aegisflow-20260814
 - status: completed
 - created_at: 2026-08-14T21:00:00+08:00
-- updated_at: 2026-08-14T23:20:00+08:00
+- updated_at: 2026-08-15T00:00:00+08:00
 
 ## Handoff
 
-AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are complete. The installable CLI, evidence-driven analysis workflow, optional adversarial provider, responsive HTML/JSON reports, 16-case benchmark corpus, tests, and competition documentation are present. The next safe action is to review the generated report or prepare the submission/video from `docs/demo-script.md`.
+AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are complete. The installable CLI, evidence-driven analysis workflow, optional adversarial provider, responsive HTML/JSON reports, 16-case benchmark corpus, tests, and competition documentation are present. `README.md` is now a Chinese project guide, while commands and machine-readable contracts are unchanged. The next safe action is to review the generated report or prepare the submission/video from `docs/demo-script.md`.
 
 ## Constraints
 
@@ -121,3 +121,15 @@ AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are 
 - E14: `python -m pytest -q`; result: 81 passed and 2 skipped; captured_at: 2026-08-14T23:20:00+08:00
 - E15: `python -m ruff check .` and `python -m ruff format --check .`; result: all checks passed and 32 files formatted; captured_at: 2026-08-14T23:20:00+08:00
 - E16: generated `artifacts/report.html` and `artifacts/benchmark-cn.json`; result: `lang="zh-CN"`, Chinese report labels present, precision/recall/F1 1.000 and false-positive metric 0.000; captured_at: 2026-08-14T23:20:00+08:00
+
+### M-20260815-001 | 2026-08-15T00:00:00+08:00 | fact
+
+- state: active
+- claim: The root README has been rewritten in Simplified Chinese, preserving current CLI commands, Agent-mode credential guidance, exit-code semantics, project boundaries, document links, and verification commands.
+- rationale: The user requested a Chinese README; keeping executable identifiers unchanged preserves copy-and-run behavior.
+- evidence: [E17]
+- supersedes: none
+
+#### Evidence
+
+- E17: `git diff --check` and `Select-String -Path README.md -Pattern "AegisFlow|快速开始|Agent 模式|验证"`; result: no whitespace error, and the Chinese sections plus original command identifiers are present; captured_at: 2026-08-15T00:00:00+08:00
