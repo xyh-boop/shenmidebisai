@@ -101,11 +101,10 @@ No worker may edit another worker's owned path. Shared-contract changes must be 
 ## Verification Commands
 
 ```powershell
-python -m pip install -e ".[dev]"
+python -m pip install ".[dev]"
 python -m pytest -q
 python -m ruff check .
 python -m ruff format --check .
 aegisflow doctor
 aegisflow benchmark .\benchmarks\fixtures --ground-truth .\benchmarks\ground_truth.json --output .\artifacts\benchmark.json
 ```
-

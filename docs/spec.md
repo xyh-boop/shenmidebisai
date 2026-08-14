@@ -2,8 +2,8 @@
 
 ## Status
 
-- Phase: SPECIFY
-- State: approved for implementation
+- Phase: IMPLEMENT
+- State: implemented and verified
 - Approved direction: 2026-08-14
 
 ## Objective
@@ -188,7 +188,7 @@ Every report envelope contains `schema_version`, `tool_version`, `run`, `metrics
 
 ```powershell
 # Install
-python -m pip install -e ".[dev]"
+python -m pip install ".[dev]"
 
 # Environment validation
 aegisflow doctor
@@ -328,4 +328,3 @@ def route_candidate(candidate: Candidate, budget: BudgetState) -> RoutingDecisio
 ## Open Questions
 
 None blocking. The user approved this optimized direction on 2026-08-14. A live model provider remains optional and can be selected at demonstration time through the OpenAI-compatible configuration.
-

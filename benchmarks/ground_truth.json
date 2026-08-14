@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "expected": [
+    {
+      "truth_id": "js-command-injection",
+      "rule_id": "AF-CMD-001",
+      "path": "javascript/cmd_vulnerable.js",
+      "start_line": 2,
+      "end_line": 2
+    },
+    {
+      "truth_id": "js-unsafe-deserialization",
+      "rule_id": "AF-DESER-001",
+      "path": "javascript/deser_vulnerable.js",
+      "start_line": 2,
+      "end_line": 2
+    },
+    {
+      "truth_id": "js-path-traversal",
+      "rule_id": "AF-PATH-001",
+      "path": "javascript/path_vulnerable.js",
+      "start_line": 2,
+      "end_line": 2
+    },
+    {
+      "truth_id": "js-sql-injection",
+      "rule_id": "AF-SQL-001",
+      "path": "javascript/sql_vulnerable.js",
+      "start_line": 3,
+      "end_line": 3
+    },
+    {
+      "truth_id": "py-command-injection",
+      "rule_id": "AF-CMD-001",
+      "path": "python/cmd_vulnerable.py",
+      "start_line": 2,
+      "end_line": 2
+    },
+    {
+      "truth_id": "py-unsafe-deserialization",
+      "rule_id": "AF-DESER-001",
+      "path": "python/deser_vulnerable.py",
+      "start_line": 2,
+      "end_line": 2
+    },
+    {
+      "truth_id": "py-path-traversal",
+      "rule_id": "AF-PATH-001",
+      "path": "python/path_vulnerable.py",
+      "start_line": 2,
+      "end_line": 2
+    },
+    {
+      "truth_id": "py-sql-injection",
+      "rule_id": "AF-SQL-001",
+      "path": "python/sql_vulnerable.py",
+      "start_line": 2,
+      "end_line": 2
+    }
+  ]
+}

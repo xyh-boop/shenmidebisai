@@ -1,0 +1,14 @@
+[provider]
+base_url = "https://api.example.com/v1"
+model = "example-security-review-model"
+api_key_env = "AEGISFLOW_API_KEY"
+timeout_seconds = 30.0
+max_context_bytes = 32768
+input_cost_per_million_tokens = 0.0
+output_cost_per_million_tokens = 0.0
+
+[routing]
+auto_confirm_confidence = 0.90
+auto_reject_confidence = 0.95
+agent_review_severities = ["critical", "high"]
+
