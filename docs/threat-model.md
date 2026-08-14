@@ -1,32 +1,31 @@
-# Threat Model
+# 威胁模型
 
-## Assets
+## 受保护资产
 
-- host integrity and availability;
-- source-code confidentiality;
-- API credentials and provider budgets;
-- report integrity and benchmark reproducibility.
+- 主机完整性与可用性；
+- 源代码保密性；
+- API 凭据与服务提供方预算；
+- 报告完整性与基准结果可复现性。
 
-## Trust boundaries
+## 信任边界
 
-Repository files, names, links, encodings, comments, and embedded instructions are untrusted. Provider responses are also untrusted until schema and evidence-reference validation succeeds. CLI options and local configuration are operator-controlled but still validated.
+仓库内的文件、文件名、链接、编码、注释和嵌入式指令均不可信。服务提供方响应同样不可信，只有通过模式与证据引用校验后才可使用。CLI 选项和本地配置由操作者控制，但仍会被校验。
 
-## Threats and controls
+## 威胁与控制措施
 
-| Threat | Control | Residual risk |
+| 威胁 | 控制措施 | 残余风险 |
 |---|---|---|
-| Target code execution | No imports, builds, installs, tests, hooks, or target commands | Parser/library defects remain possible |
-| Path or symlink escape | Resolved-root containment, no link following, reparse-point rejection | Filesystem races are reduced, not formally eliminated |
-| Resource exhaustion | File count, depth, total bytes, per-file bytes, bounded snippets and provider context | Adversarial syntax can still consume parser CPU within process limits |
-| Source disclosure | Offline default; explicit Agent mode; minimal redacted evidence | Enabled external providers receive selected snippets |
-| Prompt injection in source | Source is quoted as data; fixed role contracts; structured validation | A model may still produce unusable output, which becomes `needs_review` |
-| Credential leakage | API key is read from a named environment variable and never serialized | Operator shell history and external provider handling are out of scope |
-| Report XSS | HTML autoescaping; no execution of repository content | Browser or template engine vulnerabilities are out of scope |
-| Budget abuse | Request, token, context-byte, and USD checks before calls | Misconfigured zero prices understate provider billing |
-| Benchmark gaming | Independent truth manifest, safe near-misses, deduplication, repeatable offline score | Bundled corpus is small and cannot represent all real projects |
-| Report overwrite in target | Outputs inside scanned source are rejected except ignored artifact directories | Operator can explicitly choose an external path with its own permissions |
+| 执行目标代码 | 不导入、不构建、不安装、不测试、不执行钩子或目标命令 | 解析器或依赖库自身仍可能存在缺陷 |
+| 路径或符号链接逃逸 | 校验解析后路径仍在根目录内、不跟随链接、拒绝重解析点 | 可降低文件系统竞争风险，但不能形式化消除 |
+| 资源耗尽 | 限制文件数量、目录深度、总字节数、单文件字节数、证据片段和提供方上下文 | 对抗性语法仍可在进程限制范围内消耗解析 CPU |
+| 源码泄露 | 默认离线；Agent 模式需显式开启；仅发送最小化且脱敏的证据 | 启用外部提供方后，选定片段会发送至该服务 |
+| 源码中的提示词注入 | 源码仅作为数据引用；角色契约固定；输出经结构化校验 | 模型仍可能产生不可用输出，此时会标记为 `needs_review` |
+| 凭据泄露 | API 密钥仅从指定环境变量读取，绝不序列化 | 操作者的 Shell 历史和外部服务方处理不在范围内 |
+| 报告 XSS | HTML 自动转义；绝不执行仓库内容 | 浏览器或模板引擎漏洞不在范围内 |
+| 预算滥用 | 每次调用前检查请求数、令牌、上下文字节和美元预算 | 配置为零的错误价格会低估实际账单 |
+| 基准投机 | 独立真值清单、安全近似样例、去重与可重复离线评分 | 内置样本集较小，无法代表全部真实项目 |
+| 覆盖目标目录中的报告 | 拒绝写入扫描源码范围，已忽略的产物目录除外 | 操作者仍可显式选择具有自身权限约束的外部路径 |
 
-## Non-goals
+## 非目标
 
-AegisFlow does not attack services, execute proof-of-concept payloads, modify target source, guarantee exploitability, detect every CWE, or serve as a sandbox for hostile code. Findings require human review before disclosure or production action.
-
+AegisFlow 不攻击服务、不执行概念验证载荷、不修改目标源码、不保证漏洞可利用性、不检测全部 CWE，也不充当不可信代码沙箱。发现结果必须经过人工复核后，才能用于漏洞披露或生产环境处置。

@@ -3,11 +3,11 @@
 - task_id: aegisflow-20260814
 - status: completed
 - created_at: 2026-08-14T21:00:00+08:00
-- updated_at: 2026-08-15T00:00:00+08:00
+- updated_at: 2026-08-15T00:30:00+08:00
 
 ## Handoff
 
-AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are complete. The installable CLI, evidence-driven analysis workflow, optional adversarial provider, responsive HTML/JSON reports, 16-case benchmark corpus, tests, and competition documentation are present. `README.md` is now a Chinese project guide, while commands and machine-readable contracts are unchanged. The next safe action is to review the generated report or prepare the submission/video from `docs/demo-script.md`.
+AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are complete. The installable CLI, evidence-driven analysis workflow, optional adversarial provider, responsive HTML/JSON reports, 16-case benchmark corpus, tests, and competition documentation are present. The README, all five linked `docs/` documents, and the `tasks/` plan/checklist are now Chinese, while commands and machine-readable contracts are unchanged. The `article_images/` files now have their correct PNG/JPEG filename extensions, with bytes preserved exactly. The next safe action is to review the generated report or prepare the submission/video from `docs/demo-script.md`.
 
 ## Constraints
 
@@ -133,3 +133,40 @@ AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are 
 #### Evidence
 
 - E17: `git diff --check` and `Select-String -Path README.md -Pattern "AegisFlow|快速开始|Agent 模式|验证"`; result: no whitespace error, and the Chinese sections plus original command identifiers are present; captured_at: 2026-08-15T00:00:00+08:00
+
+### M-20260815-002 | 2026-08-15T00:10:00+08:00 | fact
+
+- state: active
+- claim: The seven files under `article_images/` are valid PNG or JPEG data, and their filename extensions have been corrected without changing their bytes.
+- rationale: The files used the generic `.img` extension, which prevented normal image association despite valid image content.
+- evidence: [E18, E19]
+- supersedes: none
+
+#### Evidence
+
+- E18: signature inspection and native preview of `article_images/2.img` and `article_images/4.img`; result: five PNG and two JPEG signatures were detected, and the samples rendered as the event poster and timeline image; captured_at: 2026-08-15T00:10:00+08:00
+- E19: `git hash-object` comparison after rename; result: all seven corrected filenames have hashes identical to their respective original Git blobs; captured_at: 2026-08-15T00:10:00+08:00
+
+### M-20260815-003 | 2026-08-15T00:20:00+08:00 | fact
+
+- state: active
+- claim: All five user-facing Markdown documents under `docs/` have been localized to Simplified Chinese, with commands, identifiers, formulas, paths, and code contracts retained verbatim where machine readability matters.
+- rationale: The user requested that every document linked from the README documentation section be Chinese.
+- evidence: [E20]
+- supersedes: none
+
+#### Evidence
+
+- E20: `Get-ChildItem docs -File` and an English-leading-line scan across all five Markdown files; result: `spec.md`, `architecture.md`, `threat-model.md`, `benchmark.md`, and `demo-script.md` are present and each has zero matching English title or prose prefixes; captured_at: 2026-08-15T00:20:00+08:00
+
+### M-20260815-004 | 2026-08-15T00:30:00+08:00 | fact
+
+- state: active
+- claim: The SDD planning documents `tasks/plan.md` and `tasks/todo.md` have also been localized to Simplified Chinese while preserving task IDs, file paths, callable names, and verification commands.
+- rationale: The user requested Chinese documentation broadly, so the repository's planning and checklist documents were included in the localization pass.
+- evidence: [E21]
+- supersedes: none
+
+#### Evidence
+
+- E21: `Get-Content tasks\plan.md` and `Get-Content tasks\todo.md`; result: headings, explanatory prose, acceptance criteria, and task descriptions are Chinese, with code identifiers and commands retained; captured_at: 2026-08-15T00:30:00+08:00

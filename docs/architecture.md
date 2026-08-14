@@ -1,41 +1,40 @@
-# Architecture
+# 系统架构
 
-## System flow
+## 系统流程
 
 ```text
 Typer CLI
-  -> safe repository ingestion
-  -> Python AST / JS-TS Tree-sitter analysis
-  -> typed Candidate and evidence graph
-  -> confidence scoring and cost-aware routing
-  -> optional Verifier / Critic / Arbiter review
-  -> validated Finding objects
-  -> canonical ReportEnvelope
-  -> JSON or escaped self-contained HTML
-  -> optional location-based benchmark scorer
+  -> 安全仓库读取
+  -> Python AST / JS-TS Tree-sitter 分析
+  -> 类型化 Candidate 与证据图
+  -> 置信度评分与成本感知路由
+  -> 可选的 Verifier / Critic / Arbiter 复核
+  -> 已验证的 Finding 对象
+  -> 规范 ReportEnvelope
+  -> JSON 或已转义的自包含 HTML
+  -> 可选的基于定位匹配的基准评分器
 ```
 
-JSON is the canonical representation; HTML is a rendering of the same validated envelope. Repository-relative paths, stable ordering, and content-based finding identifiers make offline results comparable between runs.
+JSON 是规范化结果，HTML 是由同一份已验证报告数据渲染出的展示层。仓库相对路径、稳定排序和基于内容的发现标识符，使离线扫描结果可以在多次运行之间直接比较。
 
-## Component boundaries
+## 组件边界
 
-- `ingest` discovers only supported source files, rejects links and reparse points, enforces byte/file/depth limits, and emits structured diagnostics.
-- `analyzers` parse code without execution and produce candidates for four locked rules. Evidence nodes represent sources, propagation, constraints, sanitizers, and sinks.
-- `workflow` calibrates confidence, applies deterministic confirm/reject/review routes, and invokes adversarial review only for eligible ambiguous findings.
-- `providers` bounds, redacts, sends, and validates OpenAI-compatible review requests while enforcing request/token/cost budgets.
-- `reporting` computes run metrics and serializes escaped output from validated DTOs.
-- `benchmark` loads independent truth and scores unique findings by rule, normalized path, and overlapping line range.
-- `cli` is a thin orchestration layer. It does not reimplement analysis or scoring.
+- `ingest` 仅发现受支持的源文件，拒绝链接和重解析点，执行字节数、文件数量与目录深度限制，并输出结构化诊断信息。
+- `analyzers` 不执行代码，只负责解析并针对四条锁定规则生成候选。证据节点表示来源、传播、约束、净化处理和危险汇点。
+- `workflow` 校准置信度，应用确定性的确认、拒绝或待复核路由，并且只对符合条件的高风险歧义发现调用对抗式复核。
+- `providers` 对兼容 OpenAI API 的复核请求进行上下文裁剪、脱敏、发送与验证，同时执行请求数、令牌和费用预算限制。
+- `reporting` 计算运行指标，并从已验证 DTO 序列化出经过转义的输出。
+- `benchmark` 加载独立真值，并按照规则、规范化路径和重叠行号范围对唯一发现评分。
+- `cli` 是轻量编排层，不重复实现分析或评分逻辑。
 
-## Agent semantics
+## Agent 语义
 
-The Agent roles are contract-bound stages rather than unrestricted personas. Verifier argues from graph nodes that support exploitability; Critic searches for sanitizers, constraints, constants, and reachability counterevidence; Arbiter may cite only validated graph nodes and structured prior decisions. A malformed or budget-blocked review cannot increase confidence.
+各 Agent 角色是受契约约束的处理阶段，而不是可自由发挥的人格。Verifier 根据支持可利用性的图节点给出论据；Critic 查找净化处理、约束、常量与可达性反证；Arbiter 只能引用已验证图节点和已有结构化结论。格式错误或被预算拦截的复核请求不能提升置信度。
 
-## Determinism and budgets
+## 确定性与预算
 
-Offline mode makes no provider call. Files, candidates, nodes, decisions, and findings are stably sorted. Model-assisted decisions are recorded separately with requests, token usage, estimated cost, route reason, and latency. Hard limits are checked before each provider request.
+离线模式不会调用任何服务提供方。文件、候选、节点、决策和发现均采用稳定排序。模型辅助决策会单独记录请求数、令牌用量、预估成本、路由原因与延迟。每次提供方调用前均会检查硬性限制。
 
-## Deliberate limits
+## 有意保留的限制
 
-The MVP uses local, bounded data-flow. It does not implement complete interprocedural aliases, cross-file framework resolution, dynamic-language runtime semantics, or runtime exploitability. Those limits preserve predictable latency and make evidence reviewable, but they can cause both false negatives and conservative `needs_review` outcomes.
-
+MVP 采用本地、受限的数据流分析，不实现完整的跨过程别名分析、跨文件框架解析、动态语言运行时语义或运行时可利用性判定。这些边界换来可预测延迟和可审查证据，但也可能产生漏报，或将部分结果保守地标记为 `needs_review`。

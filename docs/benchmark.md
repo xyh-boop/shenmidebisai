@@ -1,21 +1,21 @@
-# Benchmark Methodology
+# 基准测试方法
 
-## Corpus
+## 样本集
 
-The bundled corpus contains 16 independent files: one vulnerable and one structurally related safe case for each of four vulnerability classes in Python and JavaScript. Eight vulnerable cases appear in `benchmarks/ground_truth.json`; safe cases do not contain expected entries.
+内置样本集包含 16 个相互独立的文件：Python 和 JavaScript 中四类漏洞各有一个易受攻击样例和一个结构相近的安全样例。8 个漏洞样例记录在 `benchmarks/ground_truth.json` 中；安全样例不包含预期发现。
 
-| Rule | CWE | Python | JavaScript |
+| 规则 | CWE | Python | JavaScript |
 |---|---|---:|---:|
-| `AF-CMD-001` | CWE-78 | vulnerable + safe | vulnerable + safe |
-| `AF-SQL-001` | CWE-89 | vulnerable + safe | vulnerable + safe |
-| `AF-PATH-001` | CWE-22 | vulnerable + safe | vulnerable + safe |
-| `AF-DESER-001` | CWE-502 | vulnerable + safe | vulnerable + safe |
+| `AF-CMD-001` | CWE-78 | 漏洞 + 安全 | 漏洞 + 安全 |
+| `AF-SQL-001` | CWE-89 | 漏洞 + 安全 | 漏洞 + 安全 |
+| `AF-PATH-001` | CWE-22 | 漏洞 + 安全 | 漏洞 + 安全 |
+| `AF-DESER-001` | CWE-502 | 漏洞 + 安全 | 漏洞 + 安全 |
 
-The safe near-misses exercise constant commands, parameterized SQL, basename path reduction, and data-only JSON parsing. Expected results are kept outside source comments to avoid trivial fixture coupling.
+安全近似样例覆盖常量命令、参数化 SQL、`basename` 路径收敛和仅解析数据的 JSON。预期结果保存在源代码注释之外，避免与样例文本形成简单耦合。
 
-## Scoring
+## 评分方法
 
-A true positive requires the same rule ID, normalized repository-relative path, and an overlapping line range. Duplicate finding fingerprints count once. Unmatched report findings are false positives; unmatched truth entries are false negatives.
+真阳性需要同时满足：规则 ID 一致、规范化仓库相对路径一致、行号范围存在重叠。重复发现指纹仅计一次。报告中未匹配的发现为假阳性，真值中未匹配的条目为假阴性。
 
 ```text
 precision = TP / (TP + FP)
@@ -24,17 +24,16 @@ F1 = 2 * precision * recall / (precision + recall)
 false-positive rate = FP / (TP + FP)
 ```
 
-The report also records files and lines scanned, elapsed time, time to first high-severity finding, candidate and disposition counts, human-review count, provider requests, tokens, and estimated USD cost.
+报告还会记录扫描文件数与行数、耗时、首个高危发现时间、候选与处置结果数量、人工复核数量、提供方请求数、令牌数和预估美元成本。
 
-## Reproduction
+## 复现方式
 
 ```powershell
 aegisflow benchmark .\benchmarks\fixtures --ground-truth .\benchmarks\ground_truth.json --output .\artifacts\benchmark.json
 ```
 
-Record AegisFlow version, Python version, operating system, processor, run configuration, and whether Agent mode was enabled. The offline run is canonical. Agent-assisted changes must be reported separately because model versions and outputs can vary.
+请记录 AegisFlow 版本、Python 版本、操作系统、处理器、运行配置以及是否启用 Agent 模式。离线运行是规范基线。模型辅助的变化必须单独报告，因为模型版本和输出可能变化。
 
-## Interpretation limits
+## 结果解读边界
 
-This is a small regression and demonstration corpus, not an estimate of universal real-world accuracy. It primarily proves that the declared rules detect representative local flows and suppress paired near-misses. Claims should be expanded only with versioned public corpora and a held-out set that was not used to tune rules.
-
+这是一个小型回归与演示样本集，并非对真实世界通用准确率的估计。它主要证明已声明规则能够检测代表性的本地数据流，并抑制成对的安全近似样例。只有在加入版本化公开样本集和未参与调优的留出集后，才能扩展相关结论。

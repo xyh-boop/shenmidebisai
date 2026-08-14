@@ -1,129 +1,129 @@
-# Spec: AegisFlow Evidence-Driven Audit Agent
+# 规格说明：AegisFlow 证据驱动审计 Agent
 
-## Status
+## 状态
 
-- Phase: IMPLEMENT
-- State: implemented and verified
-- Approved direction: 2026-08-14
+- 阶段：IMPLEMENT
+- 状态：已实现并通过验证
+- 方向批准日期：2026-08-14
 
-## Objective
+## 目标
 
-AegisFlow is a local-first source-code security audit Agent for Python and JavaScript/TypeScript repositories. It combines deterministic candidate discovery, lightweight taint evidence graphs, adversarial Agent review, and cost-aware routing to find high-risk vulnerabilities without turning every source file into an opaque model prompt.
+AegisFlow 是面向 Python 和 JavaScript/TypeScript 仓库的本地优先源代码安全审计 Agent。它结合确定性的候选发现、轻量污点证据图、对抗式 Agent 复核与成本感知路由，在不把每个源文件变成不透明模型提示词的前提下发现高风险漏洞。
 
-The product is designed for security researchers, SRC teams, and competition judges who need three things at once:
+产品面向安全研究人员、SRC 团队和比赛评委，同时满足三项需求：
 
-1. exact and reviewable vulnerability evidence;
-2. measurable improvements over raw static candidates;
-3. reproducible latency, accuracy, model-cost, and human-review metrics.
+1. 提供准确且可审查的漏洞证据；
+2. 证明相对于原始静态候选的可衡量改进；
+3. 提供可复现的延迟、准确率、模型成本和人工复核指标。
 
-The MVP goes deep on four vulnerability classes:
+MVP 深入支持四类漏洞：
 
-- command injection (`CWE-78`);
-- SQL injection (`CWE-89`);
-- path traversal (`CWE-22`);
-- unsafe deserialization (`CWE-502`).
+- 命令注入（`CWE-78`）；
+- SQL 注入（`CWE-89`）；
+- 路径遍历（`CWE-22`）；
+- 不安全反序列化（`CWE-502`）。
 
-## Assumptions
+## 设计假设
 
-1. Target repositories are hostile, read-only data. AegisFlow never imports, executes, builds, installs, or tests target code.
-2. Python and JavaScript/TypeScript are the only MVP languages.
-3. The primary interface is a CLI with JSON and self-contained HTML reports.
-4. Offline mode is deterministic and requires no model credentials or network.
-5. Agent mode uses an explicitly enabled OpenAI-compatible endpoint and sends only bounded, redacted evidence snippets.
-6. Benchmark claims apply only to the versioned benchmark, recorded configuration, and recorded machine.
-7. The four vulnerability classes take priority over adding more shallow rules.
-8. Generated remediation is advisory; AegisFlow does not modify scanned source code.
+1. 目标仓库是不可信的只读数据。AegisFlow 绝不导入、执行、构建、安装或测试目标代码。
+2. MVP 仅支持 Python 和 JavaScript/TypeScript。
+3. 主要交互界面是 CLI，输出 JSON 和自包含 HTML 报告。
+4. 离线模式具有确定性，不需要模型凭据或网络访问。
+5. Agent 模式使用显式启用的兼容 OpenAI API 的服务端点，并且只发送受限、脱敏的证据片段。
+6. 基准测试结论只适用于版本化样本集、记录的配置和记录的机器环境。
+7. 四类漏洞的检测深度优先于增加更多浅层规则。
+8. 自动生成的修复建议仅供参考；AegisFlow 不修改被扫描的源代码。
 
-## Agent Workflow
+## Agent 工作流
 
 ```text
-Safe repository ingestion
-  -> deterministic candidate discovery
-  -> local evidence graph construction
-  -> confidence and risk scoring
-  -> cost-aware routing
-       -> auto-confirm when evidence is complete
-       -> needs-review when risk is low or evidence is ambiguous
-       -> adversarial review for high-risk ambiguous candidates
-            -> Verifier: supporting evidence
-            -> Critic: sanitizers, constraints, constants, unreachable paths
-            -> Arbiter: structured final decision
-  -> stable finding fingerprint
-  -> JSON / HTML / benchmark metrics
+安全读取仓库
+  -> 确定性候选发现
+  -> 构建本地证据图
+  -> 置信度与风险评分
+  -> 成本感知路由
+       -> 证据完整时自动确认
+       -> 风险较低或证据有歧义时进入人工复核
+       -> 高风险且有歧义的候选进入对抗式复核
+            -> Verifier：支持性证据
+            -> Critic：净化处理、约束、常量和不可达路径
+            -> Arbiter：结构化最终决策
+  -> 生成稳定的发现指纹
+  -> 输出 JSON / HTML / 基准指标
 ```
 
-Agent roles are contract-bound stages, not free-form personas. Invalid model output is rejected and cannot affect a finding.
+Agent 角色是受契约约束的处理阶段，不是自由发挥的人格。无效的模型输出会被拒绝，且不能影响漏洞发现结果。
 
-## User Stories
+## 用户故事
 
-- A researcher can scan a repository with one command and receive prioritized findings with exact paths, line ranges, CWE labels, evidence graphs, and remediation.
-- A reviewer can inspect source, propagation, sanitizer, constraint, and sink nodes instead of accepting an unsupported model assertion.
-- A judge can compare raw candidates with final findings and see recall, false-positive rate, time-to-first-high, cost per confirmed finding, and human-review ratio.
-- An operator can run entirely offline or set hard request, token, and USD limits for Agent mode.
-- A tester can reproduce benchmark scores from an independent ground-truth manifest and stable finding fingerprints.
+- 研究人员可以用一条命令扫描仓库，并获得带有精确路径、行号范围、CWE 标签、证据图和修复建议的优先级发现。
+- 审查人员可以检查来源、传播、净化处理、约束和汇点节点，而不是接受没有依据的模型断言。
+- 评委可以比较原始候选与最终发现，并查看召回率、假阳性率、首个高危发现时间、每条确认发现的成本和人工复核比例。
+- 操作者可以完全离线运行，也可以为 Agent 模式设置请求数、令牌和美元硬限制。
+- 测试人员可以基于独立真值清单和稳定发现指纹复现基准成绩。
 
-## Functional Requirements
+## 功能需求
 
-### Safe ingestion
+### 安全读取
 
-- Discover `.py`, `.js`, `.jsx`, `.ts`, and `.tsx` files under an explicit root.
-- Ignore dependency, VCS, cache, build, coverage, generated, and artifact directories by default.
-- Never follow symlinks; reject resolved paths outside the root.
-- Enforce configurable file count, total byte, and per-file byte limits.
-- Skip binary or undecodable files with structured diagnostics.
-- Count scanned files and logical source lines without inflating metrics from ignored content.
+- 在显式指定的根目录下发现 `.py`、`.js`、`.jsx`、`.ts` 和 `.tsx` 文件。
+- 默认忽略依赖、版本控制、缓存、构建、覆盖率、生成文件和产物目录。
+- 绝不跟随符号链接；拒绝解析后位于根目录之外的路径。
+- 支持配置文件数量、总字节数和单文件字节数限制。
+- 对二进制文件或无法解码的文件跳过，并输出结构化诊断信息。
+- 统计扫描文件和逻辑源代码行数，不能因忽略内容而虚增指标。
 
-### Candidate discovery
+### 候选发现
 
-- Python parsing uses the standard-library AST.
-- JavaScript/TypeScript parsing uses Tree-sitter and never evaluates code.
-- Each rule produces typed `Candidate` objects with stable locations and initial evidence.
-- Rules include positive signals and explicit suppressors for constants, parameterized queries, safe path containment, and safe deserializers.
+- Python 使用标准库 AST 解析。
+- JavaScript/TypeScript 使用 Tree-sitter 解析，绝不执行代码。
+- 每条规则生成带稳定定位信息和初始证据的类型化 `Candidate` 对象。
+- 规则既包含正向信号，也包含对常量、参数化查询、安全路径约束和安全反序列化器的明确抑制条件。
 
-### Evidence graph
+### 证据图
 
-- Model each finding as nodes and directed edges.
-- Node kinds: `source`, `propagation`, `sanitizer`, `constraint`, `sink`, `context`.
-- Edge kinds: `flows_to`, `sanitized_by`, `guarded_by`, `derived_from`.
-- Every confirmed or likely finding must contain at least one sink and one supporting evidence node.
-- Injection and traversal findings require a source-to-sink path unless the sink is independently dangerous by construction.
+- 将每条发现建模为节点和有向边。
+- 节点类型：`source`、`propagation`、`sanitizer`、`constraint`、`sink`、`context`。
+- 边类型：`flows_to`、`sanitized_by`、`guarded_by`、`derived_from`。
+- 每条确认或可能的发现至少包含一个汇点和一个支持性证据节点。
+- 注入和路径遍历发现必须包含 Source-to-Sink 路径，除非该汇点本身具有独立且确定的危险性。
 
-### Cost-aware routing
+### 成本感知路由
 
-- Compute deterministic evidence completeness, exploitability, and initial confidence.
-- Auto-confirm complete high-confidence evidence without a model call.
-- Auto-reject candidates with proven safe constants or recognized sanitizers.
-- Route only high-risk ambiguous candidates to adversarial review.
-- Enforce model request, prompt token, completion token, context byte, and estimated USD budgets before every request.
-- Record why each candidate was routed, skipped, confirmed, rejected, or left for human review.
+- 确定性计算证据完整度、可利用性和初始置信度。
+- 对证据完整且置信度高的候选无需模型调用，直接确认。
+- 对已证明是安全常量或命中已识别净化器的候选自动拒绝。
+- 仅将高风险且有歧义的候选送入对抗式复核。
+- 每次请求前执行模型请求数、提示词令牌、补全令牌、上下文字节和预估美元预算检查。
+- 记录每个候选被路由、跳过、确认、拒绝或留给人工复核的原因。
 
-### Adversarial review
+### 对抗式复核
 
-- `Verifier` returns a verdict, supporting node IDs, reason codes, and concise rationale.
-- `Critic` independently returns counterevidence node IDs, reason codes, and concise rationale.
-- `Arbiter` may use only validated graph nodes and prior structured decisions.
-- Source comments that instruct the model are quoted as untrusted evidence and cannot alter system instructions.
-- Invalid JSON, unknown node references, timeout, or exhausted budget results in `needs_review`, never silent confirmation.
+- `Verifier` 返回结论、支持性节点 ID、原因代码和简要依据。
+- `Critic` 独立返回反证节点 ID、原因代码和简要依据。
+- `Arbiter` 只能使用已校验的图节点和之前的结构化决策。
+- 指示模型的源码注释必须作为不可信证据引用，不能改变系统指令。
+- 无效 JSON、未知节点引用、超时或预算耗尽都只能得到 `needs_review`，绝不能静默确认为漏洞。
 
-### Reporting
+### 报告
 
-- JSON is the canonical report; HTML is rendered from the same validated envelope.
-- HTML is self-contained, responsive, and escapes all repository-controlled content.
-- The report shows severity totals, confidence, evidence graph, Agent decision timeline, supporting evidence versus counterevidence, routing reason, latency, token usage, estimated cost, and human-review state.
-- Stable content ordering and fingerprints make repeat runs comparable.
+- JSON 是规范报告；HTML 从同一份已校验的报告封装渲染而来。
+- HTML 必须自包含、响应式，并转义所有由仓库控制的内容。
+- 报告展示严重性汇总、置信度、证据图、Agent 决策时间线、支持性证据与反证、路由原因、延迟、令牌用量、预估成本和人工复核状态。
+- 稳定的内容排序和发现指纹使重复运行结果可比较。
 
-### Benchmarking
+### 基准测试
 
-- Maintain separate demonstration and regression fixture sets.
-- Each vulnerability class contains vulnerable samples and near-miss safe samples in both supported language families where feasible.
-- Ground truth lives in a separate manifest; expected findings are not embedded in source comments.
-- Scoring is location based. A true positive requires the expected rule ID, normalized path, and overlapping line range.
-- Duplicate fingerprints count once.
-- Offline metrics are the primary reproducible score. Agent-assisted before/after metrics are reported separately.
+- 分别维护演示样本集和回归样本集。
+- 在可行的情况下，每类漏洞都包含两种支持语言的漏洞样例和安全近似样例。
+- 真值存放在独立清单中；预期发现不能嵌入源代码注释。
+- 评分以定位为依据。真阳性必须匹配规则 ID、规范化路径和重叠行号范围。
+- 重复指纹只计一次。
+- 离线指标是主要可复现成绩；Agent 辅助前后指标单独报告。
 
-## Public Contracts
+## 公共契约
 
-Shared fields and enum values are locked. Worker Agents may not rename or extend them without an approved spec update.
+共享字段和枚举值已经锁定。未经批准的规格更新，Worker Agent 不得重命名或扩展它们。
 
 ```python
 class EvidenceNode(BaseModel):
@@ -182,83 +182,83 @@ class RunMetrics(BaseModel):
     estimated_cost_usd: float
 ```
 
-Every report envelope contains `schema_version`, `tool_version`, `run`, `metrics`, `findings`, and `diagnostics`. Repository paths use `/` separators. `finding_id` is a stable SHA-256 digest of rule ID, normalized path, vulnerable line range, and normalized evidence identity.
+每个报告封装都包含 `schema_version`、`tool_version`、`run`、`metrics`、`findings` 和 `diagnostics`。仓库路径统一使用 `/` 分隔符。`finding_id` 是由规则 ID、规范化路径、漏洞行号范围和规范化证据身份计算出的稳定 SHA-256 摘要。
 
-## CLI Contract
+## CLI 契约
 
 ```powershell
-# Install
+# 安装
 python -m pip install ".[dev]"
 
-# Environment validation
+# 校验环境
 aegisflow doctor
 
-# Inspect rule coverage
+# 查看规则覆盖范围
 aegisflow rules --format table
 
-# Deterministic offline scan
+# 确定性的离线扫描
 aegisflow scan . --mode offline --format html --output .\artifacts\report.html
 
-# Cost-bounded Agent scan
+# 成本受限的 Agent 扫描
 aegisflow scan . --mode agent --model-config .\config\model.example.toml --max-requests 8 --max-cost-usd 0.50 --output .\artifacts\report.html
 
-# Reproducible benchmark
+# 可复现基准测试
 aegisflow benchmark .\benchmarks\fixtures --ground-truth .\benchmarks\ground_truth.json --output .\artifacts\benchmark.json
 
-# Verification
+# 验证
 python -m pytest -q
 python -m ruff check .
 python -m ruff format --check .
 ```
 
-Exit codes:
+退出码：
 
-- `0`: completed and no finding met the configured fail threshold;
-- `1`: completed and at least one finding met the threshold;
-- `2`: invalid arguments or configuration;
-- `3`: input or parsing failure preventing a trustworthy scan;
-- `4`: required Agent mode failed or exhausted its mandatory budget.
+- `0`：完成，且没有发现达到配置阈值的漏洞；
+- `1`：完成，且至少有一条发现达到配置阈值；
+- `2`：参数或配置无效；
+- `3`：输入或解析失败，无法完成可信扫描；
+- `4`：必需的 Agent 模式失败或耗尽了强制预算。
 
-## Tech Stack
+## 技术栈
 
 - Python 3.11+
-- Pydantic 2.x for shared contracts
-- Typer and Rich for CLI output
-- Python AST plus Tree-sitter language packages for parsing
-- Jinja2 for the self-contained report
-- HTTPX for the optional OpenAI-compatible provider
-- pytest and Ruff for verification
+- Pydantic 2.x：共享契约
+- Typer 与 Rich：CLI 输出
+- Python AST 与 Tree-sitter 语言包：代码解析
+- Jinja2：自包含报告
+- HTTPX：可选的兼容 OpenAI API 服务提供方
+- pytest 与 Ruff：验证工具
 
-Default tests use fake provider transports and require neither credentials nor network.
+默认测试使用虚假的服务提供方传输，既不需要凭据，也不需要网络。
 
-## Project Structure
+## 项目结构
 
 ```text
 src/aegisflow/
-  cli.py                  CLI and exit-code mapping
-  contracts.py            Locked DTOs and enums
-  config.py               Limits, routing, and provider configuration
-  ingest/                 Safe repository discovery and loading
-  analyzers/              Parsers, rules, and local evidence tracing
-  workflow/               Scoring, routing, review, and arbitration
-  providers/              OpenAI-compatible adapter and budget accounting
-  reporting/              JSON, HTML, and metrics
-  benchmark/              Ground-truth loading and scoring
-tests/                    Unit, contract, integration, and safety tests
-benchmarks/               Demo/regression fixtures and ground truth
-docs/                     Spec, architecture, threat model, and demo script
-tasks/                    SDD plan and task checklist
-config/                   Non-secret examples
-artifacts/                Generated output, excluded from version control
+  cli.py                  CLI 与退出码映射
+  contracts.py            锁定的 DTO 与枚举
+  config.py               限制、路由和服务提供方配置
+  ingest/                 安全的仓库发现与加载
+  analyzers/              解析器、规则和本地证据追踪
+  workflow/               评分、路由、复核和仲裁
+  providers/              兼容 OpenAI API 的适配器与预算统计
+  reporting/              JSON、HTML 和指标
+  benchmark/              真值加载与评分
+tests/                    单元、契约、集成和安全测试
+benchmarks/               演示/回归样例与真值
+docs/                     规格、架构、威胁模型和演示脚本
+tasks/                    SDD 计划和任务清单
+config/                   不含密钥的示例
+artifacts/                生成的输出，不纳入版本控制
 ```
 
-## Code Style
+## 代码风格
 
-- Typed public boundaries and Pydantic validation between workflow stages.
-- Small deterministic functions; side effects are isolated in ingestion, provider, and report adapters.
-- Stable ordering for files, candidates, graph nodes, decisions, and findings.
-- Structured diagnostics for expected failures; exceptions for unrecoverable faults.
-- Comments document security invariants and non-obvious analysis tradeoffs.
+- 公共边界使用类型标注，工作流阶段之间使用 Pydantic 校验。
+- 使用小型确定性函数；副作用隔离在读取、服务提供方和报告适配器中。
+- 文件、候选、图节点、决策和发现保持稳定排序。
+- 预期失败使用结构化诊断信息；不可恢复的故障使用异常。
+- 注释只记录安全不变量和不明显的分析权衡。
 
 ```python
 def route_candidate(candidate: Candidate, budget: BudgetState) -> RoutingDecision:
@@ -271,60 +271,60 @@ def route_candidate(candidate: Candidate, budget: BudgetState) -> RoutingDecisio
     return RoutingDecision(action="needs_review", reason="insufficient_evidence")
 ```
 
-## Testing Strategy
+## 测试策略
 
-- Unit tests for path containment, limits, redaction, AST matching, evidence graphs, confidence calibration, routing, budget accounting, stable fingerprints, escaping, and benchmark math.
-- Positive and near-miss negative fixtures for every rule.
-- Contract tests for all Agent stage outputs and unknown graph-node references.
-- Golden JSON tests with injected clocks and normalized volatile fields.
-- CLI integration tests from repository scan through JSON and HTML generation.
-- Safety tests for symlink escape, malformed syntax, binary files, oversized inputs, HTML injection, prompt injection in comments, and secret leakage.
-- Provider tests use fake HTTP transports for timeout, malformed response, retries, and budget exhaustion.
-- Repeatability test requires two offline scans of identical input/configuration to produce identical normalized findings.
+- 为路径包含、限制、脱敏、AST 匹配、证据图、置信度校准、路由、预算统计、稳定指纹、转义和基准计算编写单元测试。
+- 每条规则都提供正向样例和安全近似的负向样例。
+- 为所有 Agent 阶段输出和未知图节点引用编写契约测试。
+- 使用注入时钟和规范化易变字段编写 Golden JSON 测试。
+- 编写从仓库扫描到 JSON、HTML 生成的 CLI 集成测试。
+- 编写符号链接逃逸、语法错误、二进制文件、超大输入、HTML 注入、注释中的提示词注入和密钥泄露安全测试。
+- 服务提供方测试使用虚假的 HTTP 传输，覆盖超时、格式错误响应、重试和预算耗尽。
+- 可重复性测试要求相同输入和配置的两次离线扫描产生完全相同的规范化发现。
 
-## Boundaries
+## 边界
 
-### Always
+### 始终执行
 
-- Treat repository content and model output as hostile input.
-- Verify every resolved path remains within the selected root.
-- Escape all repository content in HTML.
-- Validate every workflow transition against the locked contracts.
-- Enforce model budgets before calls and redact bounded context.
-- Record the benchmark configuration, runtime versions, and raw metrics.
-- Run tests, Ruff checks, and the benchmark before delivery.
+- 将仓库内容和模型输出视为不可信输入。
+- 验证每个解析后路径仍位于选定根目录内。
+- 在 HTML 中转义所有仓库内容。
+- 根据锁定契约校验每次工作流状态转换。
+- 在调用前执行模型预算检查，并对有限上下文进行脱敏。
+- 记录基准配置、运行时版本和原始指标。
+- 交付前运行测试、Ruff 检查和基准测试。
 
-### Ask first
+### 先征得同意
 
-- Change shared contract fields, enums, CLI commands, or report schema.
-- Add runtime dependencies beyond the approved stack.
-- Send a real repository snippet to an external provider.
-- Add languages, vulnerability classes, hosted services, databases, or active scanning.
+- 修改共享契约字段、枚举、CLI 命令或报告模式。
+- 在批准的技术栈之外增加运行时依赖。
+- 将真实仓库片段发送给外部服务提供方。
+- 增加语言、漏洞类别、托管服务、数据库或主动扫描能力。
 
-### Never
+### 严禁
 
-- Execute, import, build, install, or test scanned repositories.
-- Generate or run exploitation payloads or PoCs.
-- Persist secrets, raw environment variables, API keys, or session data.
-- Follow symlinks outside the scan root.
-- Claim benchmark scores as universal real-world accuracy.
-- weaken tests or ground truth to improve metrics.
+- 执行、导入、构建、安装或测试被扫描仓库。
+- 生成或运行漏洞利用载荷或 PoC。
+- 持久化密钥、原始环境变量、API Key 或会话数据。
+- 跟随扫描根目录之外的符号链接。
+- 将基准分数宣称为通用的真实世界准确率。
+- 为提高指标而削弱测试或修改真值。
 
-## Success Criteria
+## 成功标准
 
-1. `aegisflow doctor`, `rules`, `scan`, and `benchmark` run with documented output.
-2. Offline mode scans Python and JavaScript/TypeScript fixtures without credentials or network.
-3. All confirmed findings include a sink, evidence nodes, valid graph edges, Agent decisions, exact location, CWE, confidence, and remediation.
-4. The benchmark contains at least 16 vulnerable/safe cases across the four vulnerability classes and reaches at least 85% recall with no more than 15% false-positive rate on its declared corpus.
-5. Offline scan of the bundled corpus completes in under 10 seconds on the recorded development machine and records time-to-first-high.
-6. Two offline runs produce identical normalized findings and fingerprints.
-7. Agent mode never exceeds configured request or cost budgets and degrades invalid responses to `needs_review`.
-8. Reports expose audit volume, precision, recall, false-positive rate, F1, elapsed time, time-to-first-high, review reduction, tokens, and estimated cost.
-9. HTML reports safely render malicious snippets and fit desktop and mobile viewports without overlapping controls or text.
-10. The default pytest suite and Ruff checks pass; core safety, routing, benchmark, and reporting paths are covered.
-11. README, architecture notes, threat model, benchmark methodology, and a five-minute demo script are included.
-12. No operation writes into or executes code from the scanned repository.
+1. `aegisflow doctor`、`rules`、`scan` 和 `benchmark` 能按文档运行并输出结果。
+2. 离线模式无需凭据或网络即可扫描 Python 与 JavaScript/TypeScript 样例。
+3. 所有确认发现都包含汇点、证据节点、有效图边、Agent 决策、精确定位、CWE、置信度和修复建议。
+4. 基准测试至少包含四类漏洞的 16 个漏洞/安全样例，并在声明的样本集上达到至少 85% 召回率和不超过 15% 的假阳性率。
+5. 在记录的开发机器上，内置样本集的离线扫描在 10 秒内完成，并记录首个高危发现时间。
+6. 两次离线运行产生完全相同的规范化发现和指纹。
+7. Agent 模式不超过配置的请求或费用预算，并将无效响应降级为 `needs_review`。
+8. 报告展示审计量、Precision、Recall、假阳性率、F1、耗时、首个高危发现时间、复核减少量、令牌数和预估成本。
+9. HTML 报告能安全渲染恶意片段，并适配桌面和移动视口，不出现控件或文本重叠。
+10. 默认 pytest 套件和 Ruff 检查通过，核心安全、路由、基准和报告路径有测试覆盖。
+11. 项目包含中文 README、架构说明、威胁模型、基准测试方法和五分钟演示脚本。
+12. 任何操作都不会向被扫描仓库写入内容或执行其中代码。
 
-## Open Questions
+## 待解决问题
 
-None blocking. The user approved this optimized direction on 2026-08-14. A live model provider remains optional and can be selected at demonstration time through the OpenAI-compatible configuration.
+没有阻塞性问题。用户已于 2026-08-14 批准此优化方向。实时模型服务提供方仍为可选项，可在演示时通过兼容 OpenAI API 的配置选择。
