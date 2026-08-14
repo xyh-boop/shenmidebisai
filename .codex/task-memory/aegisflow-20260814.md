@@ -3,11 +3,11 @@
 - task_id: aegisflow-20260814
 - status: completed
 - created_at: 2026-08-14T21:00:00+08:00
-- updated_at: 2026-08-15T00:30:00+08:00
+- updated_at: 2026-08-15T01:00:00+08:00
 
 ## Handoff
 
-AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are complete. The installable CLI, evidence-driven analysis workflow, optional adversarial provider, responsive HTML/JSON reports, 16-case benchmark corpus, tests, and competition documentation are present. The README, all five linked `docs/` documents, and the `tasks/` plan/checklist are now Chinese, while commands and machine-readable contracts are unchanged. The `article_images/` files now have their correct PNG/JPEG filename extensions, with bytes preserved exactly. The next safe action is to review the generated report or prepare the submission/video from `docs/demo-script.md`.
+AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are complete. The installable CLI, evidence-driven analysis workflow, optional adversarial provider, responsive HTML/JSON reports, 16-case benchmark corpus, tests, and competition documentation are present. The README, linked `docs/` documents, and the `tasks/` plan/checklist are Chinese. Competition-readiness materials now define an honest submission package, a de-identified simulation case, an experiment protocol, and arena verification gates. The project remains a local prototype until official arena, authorized case, independent holdout, and live-provider evidence are obtained. The next safe action is to obtain those external artifacts and run the documented protocol.
 
 ## Constraints
 
@@ -170,3 +170,17 @@ AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are 
 #### Evidence
 
 - E21: `Get-Content tasks\plan.md` and `Get-Content tasks\todo.md`; result: headings, explanatory prose, acceptance criteria, and task descriptions are Chinese, with code identifiers and commands retained; captured_at: 2026-08-15T00:30:00+08:00
+
+### M-20260815-005 | 2026-08-15T01:00:00+08:00 | fact
+
+- state: active
+- claim: The competition-readiness review has been addressed with a Chinese submission-package draft, de-identified practice-case template, experiment protocol, arena-adapter checklist, readiness-status artifact, and explicit external evidence gates.
+- rationale: The review requires organized, auditable submission materials without overstating unverified arena, authorization, or model-provider results.
+- evidence: [E22, E23, E24]
+- supersedes: none
+
+#### Evidence
+
+- E22: `docs/submission-package.md`; result: Chinese technical proposal is 1,719 characters and explicitly identifies scope, reproducibility, experiment limits, and pending external evidence; captured_at: 2026-08-15T01:00:00+08:00
+- E23: `python -m pytest -q`, `python -m ruff check .`, and `python -m ruff format --check .`; result: 81 passed, 2 skipped for unavailable Windows symlink privilege; Ruff checks and formatting passed; captured_at: 2026-08-15T01:00:00+08:00
+- E24: `aegisflow doctor`, offline benchmark, and offline scan; result: Python 3.11.9 with parsers available, precision/recall/F1 1.000 on the 16-case bundled corpus, and `artifacts/offline-report.json` written; captured_at: 2026-08-15T01:00:00+08:00

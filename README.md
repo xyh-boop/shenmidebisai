@@ -58,6 +58,11 @@ AegisFlow 进行受限的、本地的、主要在函数内的数据流追踪。�
 - [威胁模型](docs/threat-model.md)：输入、数据处理与安全假设。
 - [基准测试方法](docs/benchmark.md)：真值清单与评分口径。
 - [五分钟演示脚本](docs/demo-script.md)：比赛展示流程。
+- [参赛技术方案](docs/submission-package.md)：不超过 5,000 字的技术方案初稿与提交边界。
+- [脱敏实践案例](docs/practice-case.md)：明确标注的模拟案例和正式案例补录模板。
+- [对照实验协议](docs/experiment-protocol.md)：传统流程、`offline` 与 `agent` 的指标口径。
+- [靶场适配清单](docs/arena-adapter.md)：官方协议确认和试跑验收项。
+- [评审意见](docs/competition-readiness-review.md)：当前参赛准备度与待补证据。
 
 ## 验证
 
