@@ -3,11 +3,11 @@
 - task_id: aegisflow-20260814
 - status: completed
 - created_at: 2026-08-14T21:00:00+08:00
-- updated_at: 2026-08-15T01:00:00+08:00
+- updated_at: 2026-08-15T01:10:00+08:00
 
 ## Handoff
 
-AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are complete. The installable CLI, evidence-driven analysis workflow, optional adversarial provider, responsive HTML/JSON reports, 16-case benchmark corpus, tests, and competition documentation are present. The README, linked `docs/` documents, and the `tasks/` plan/checklist are Chinese. Competition-readiness materials now define an honest submission package, a de-identified simulation case, an experiment protocol, and arena verification gates. The project remains a local prototype until official arena, authorized case, independent holdout, and live-provider evidence are obtained. The next safe action is to obtain those external artifacts and run the documented protocol.
+AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are complete. The installable CLI, evidence-driven analysis workflow, optional adversarial provider, responsive HTML/JSON reports, 16-case benchmark corpus, tests, and competition documentation are present. The README, linked `docs/` documents, and the `tasks/` plan/checklist are Chinese. Competition-readiness materials now define an honest submission package, a de-identified simulation case, an experiment protocol, and arena verification gates. The unrelated `article_images/` web assets were removed from `origin/main` by explicit user instruction; `.codex/task-memory/` remains. The project remains a local prototype until official arena, authorized case, independent holdout, and live-provider evidence are obtained. The next safe action is to obtain those external artifacts and run the documented protocol.
 
 ## Constraints
 
@@ -184,3 +184,16 @@ AegisFlow MVP is implemented and verified end to end. All SDD tasks T01-T07 are 
 - E22: `docs/submission-package.md`; result: Chinese technical proposal is 1,719 characters and explicitly identifies scope, reproducibility, experiment limits, and pending external evidence; captured_at: 2026-08-15T01:00:00+08:00
 - E23: `python -m pytest -q`, `python -m ruff check .`, and `python -m ruff format --check .`; result: 81 passed, 2 skipped for unavailable Windows symlink privilege; Ruff checks and formatting passed; captured_at: 2026-08-15T01:00:00+08:00
 - E24: `aegisflow doctor`, offline benchmark, and offline scan; result: Python 3.11.9 with parsers available, precision/recall/F1 1.000 on the 16-case bundled corpus, and `artifacts/offline-report.json` written; captured_at: 2026-08-15T01:00:00+08:00
+
+### M-20260815-006 | 2026-08-15T01:10:00+08:00 | fact
+
+- state: active
+- claim: The seven unrelated competition webpage images were removed from Git and pushed to `origin/main`; generated artifacts and test/lint caches were already ignored and never tracked.
+- rationale: The user directed removal of the first four non-deliverable categories from the GitHub repository while retaining task memory until project completion.
+- evidence: [E25, E26]
+- supersedes: M-20260815-002
+
+#### Evidence
+
+- E25: `git ls-files -- article_images/** artifacts/** .pytest_cache/** .ruff_cache/**`; result: no matching tracked paths after commit `26e0c8e`; captured_at: 2026-08-15T01:10:00+08:00
+- E26: `git push origin main`; result: `26e0c8e` advanced `origin/main` and removed the seven `article_images` paths; captured_at: 2026-08-15T01:10:00+08:00
