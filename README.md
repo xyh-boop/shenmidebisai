@@ -10,8 +10,9 @@ AegisFlow 是一个以证据为核心、优先本地运行的源代码安全审�
 - **证据可追溯**：每条发现包含来源、传播、约束、净化处理与危险汇点等证据节点。
 - **Agent 分层复核**：仅将证据不足但风险较高的候选交由 Verifier、Critic 与 Arbiter 复核，避免无边界调用模型。
 - **成本与风险受控**：限制模型请求数、上下文、令牌与预算；无效响应、超时或预算耗尽会标记为 `needs_review`，不会被静默确认为漏洞。
-- **结果可复现**：离线结果按稳定顺序输出；基准测试以独立真值清单统计定位级 Precision、Recall 和 F1。
+- **结果可复现**：离线结果按稳定顺序输出；基准测试以独立真值清单统计定位级 Precision、Recall、F1 和错误发现率 FDR（`FP / (TP + FP)`）。没有 TN 定义时不宣称经典 FPR。
 - **双格式报告**：支持规范 JSON 与独立 HTML 报告；HTML 界面为简体中文，JSON 契约、规则 ID 和证据字段保持稳定。
+- **完整性可审计**：`AnalysisResult.complete=false` 或读取/分析出现 `ERROR` 时仍可落盘审计报告，但扫描以退出码 `3` 表示不完整；`rejected` 单独展示，不进入最终严重性摘要。
 
 ## 快速开始
 
@@ -27,16 +28,20 @@ aegisflow benchmark .\benchmarks\fixtures --ground-truth .\benchmarks\ground_tru
 
 当发现达到 `--fail-on` 指定阈值时，`scan` 返回退出码 `1`；演示或仅查看结果时请使用 `--fail-on none`。报告可输出到扫描目录之外，或扫描目录中被忽略的 `artifacts/`、`.artifacts/` 路径；输出到待扫描源码范围内的其他路径会被拒绝。
 
+扫描使用 `max_entries`、`max_directories`、`max_path_bytes`、`max_total_bytes` 和 `max_file_bytes` 进行受限枚举，并受代码定义的绝对硬上限约束。不可读文件、解析失败或限制截断会留下 `ERROR` 诊断，不会被标记为完整成功。
+
+报告中的 `configuration_digest` 覆盖实际生效的扫描、分析、路由、provider 配置以及预算和严格 Agent 策略；未知 TOML 段或字段会被拒绝。provider 响应同时受声明长度和实际读取字节数限制。
+
 ## Agent 模式
 
-复制不含密钥的示例配置 `config/model.example.toml`，选择兼容 OpenAI API 的服务端点，并在环境变量中设置 `api_key_env` 指定的密钥。凭据仅保留在环境变量中，不会写入报告。
+复制不含密钥的示例配置 `config/model.example.toml`，选择兼容 OpenAI API 的服务端点，并在环境变量中设置 `api_key_env` 指定的密钥。公网服务端点必须使用 HTTPS；明文 HTTP 只有在显式设置 `allow_insecure_http = true` 且主机为 loopback 时才允许，用于本机调试。凭据仅保留在环境变量中，不会写入报告。
 
 ```powershell
 $env:AEGISFLOW_API_KEY = "..."
-aegisflow scan . --mode agent --model-config .\config\model.example.toml --max-requests 8 --max-cost-usd 0.50 --output .\artifacts\agent-report.html --fail-on none
+aegisflow scan . --mode agent --model-config .\config\model.example.toml --max-requests 8 --max-cost-usd 0.50 --output .\artifacts\agent-report.html --fail-on none --require-agent-success
 ```
 
-Agent 模式只会复核高风险且证据存在歧义的候选。离线基准成绩仍是唯一可重复验证的评测依据，模型辅助结论会单独记录，避免不确定性影响基线。
+Agent 模式只会复核高风险且证据存在歧义的候选。缺少 API key、超时、无效响应、响应超限或预算耗尽时，非严格模式仍保留本地发现并标记 `needs_review`；启用 `--require-agent-success` 后同类 Agent 失败返回退出码 `4`。本地请求前的保守预算是不可退款硬预算，provider 自报 usage 只作观测，不会释放额度。外发内容仅做尽力过滤，不宣称完整脱敏。
 
 ## 命令与退出码
 
@@ -45,7 +50,17 @@ Agent 模式只会复核高风险且证据存在歧义的候选。离线基准�
 - `aegisflow scan`：生成规范 JSON 或自包含 HTML 审计报告。
 - `aegisflow benchmark`：扫描基准样本，并按独立真值清单计算指标。
 
-退出码含义如下：`0` 表示扫描完成且未达到阈值；`1` 表示扫描完成但存在达到阈值的发现；`2` 表示参数或配置无效；`3` 表示输入不可信或解析失败；`4` 表示必需的 Agent 模式调用失败。
+退出码矩阵如下：
+
+| 退出码 | 含义 |
+|---:|---|
+| `0` | 扫描完整、要求的 Agent 阶段成功，且没有达到 `--fail-on` 的最终发现。 |
+| `1` | 扫描完整、要求的 Agent 阶段成功，且存在达到 `--fail-on` 的最终发现。 |
+| `2` | CLI 参数、TOML 或严格配置无效；不包含仅缺少 API key 的非严格 Agent 情形。 |
+| `3` | 输入读取、分析完整性或报告安全写入失败；报告若已安全生成仍仅作为不完整审计记录。 |
+| `4` | 启用 `--require-agent-success` 时 provider 失败、响应超限或硬预算不足。非严格模式保留报告并标记 `needs_review`。 |
+
+`rejected` 结果在报告中单列并保留反证，不计入最终严重性摘要。
 
 ## 项目边界
 
@@ -59,7 +74,7 @@ AegisFlow 进行受限的、本地的、主要在函数内的数据流追踪。�
 - [基准测试方法](docs/benchmark.md)：真值清单与评分口径。
 - [五分钟演示脚本](docs/demo-script.md)：比赛展示流程。
 - [参赛技术方案](docs/submission-package.md)：不超过 5,000 字的技术方案初稿与提交边界。
-- [脱敏实践案例](docs/practice-case.md)：明确标注的模拟案例和正式案例补录模板。
+- [外发过滤实践案例](docs/practice-case.md)：明确标注的模拟案例和正式案例补录模板。
 - [对照实验协议](docs/experiment-protocol.md)：传统流程、`offline` 与 `agent` 的指标口径。
 - [靶场适配清单](docs/arena-adapter.md)：官方协议确认和试跑验收项。
 - [评审意见](docs/competition-readiness-review.md)：当前参赛准备度与待补证据。

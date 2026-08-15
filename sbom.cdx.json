@@ -1,0 +1,403 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "serialNumber": "urn:uuid:fc427e4e-fdfb-582c-95ae-ce30101d0bcc",
+  "metadata": {
+    "timestamp": "1970-01-01T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "Astral Software Inc.",
+        "name": "uv",
+        "version": "0.11.17"
+      }
+    ],
+    "component": {
+      "type": "library",
+      "bom-ref": "aegisflow-1@0.1.0",
+      "name": "aegisflow",
+      "version": "0.1.0",
+      "properties": [
+        {
+          "name": "uv:package:is_project_root",
+          "value": "true"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "annotated-doc-2@0.0.5",
+      "name": "annotated-doc",
+      "version": "0.0.5",
+      "purl": "pkg:pypi/annotated-doc@0.0.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "annotated-types-3@0.8.0",
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "purl": "pkg:pypi/annotated-types@0.8.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "anyio-4@4.14.2",
+      "name": "anyio",
+      "version": "4.14.2",
+      "purl": "pkg:pypi/anyio@4.14.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "certifi-5@2026.7.22",
+      "name": "certifi",
+      "version": "2026.7.22",
+      "purl": "pkg:pypi/certifi@2026.7.22"
+    },
+    {
+      "type": "library",
+      "bom-ref": "colorama-6@0.4.6",
+      "name": "colorama",
+      "version": "0.4.6",
+      "purl": "pkg:pypi/colorama@0.4.6",
+      "properties": [
+        {
+          "name": "uv:package:marker",
+          "value": "sys_platform == 'win32'"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "h11-7@0.16.0",
+      "name": "h11",
+      "version": "0.16.0",
+      "purl": "pkg:pypi/h11@0.16.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "httpcore-8@1.0.9",
+      "name": "httpcore",
+      "version": "1.0.9",
+      "purl": "pkg:pypi/httpcore@1.0.9"
+    },
+    {
+      "type": "library",
+      "bom-ref": "httpx-9@0.28.1",
+      "name": "httpx",
+      "version": "0.28.1",
+      "purl": "pkg:pypi/httpx@0.28.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "idna-10@3.18",
+      "name": "idna",
+      "version": "3.18",
+      "purl": "pkg:pypi/idna@3.18"
+    },
+    {
+      "type": "library",
+      "bom-ref": "iniconfig-11@2.3.0",
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "purl": "pkg:pypi/iniconfig@2.3.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "jinja2-12@3.1.6",
+      "name": "jinja2",
+      "version": "3.1.6",
+      "purl": "pkg:pypi/jinja2@3.1.6"
+    },
+    {
+      "type": "library",
+      "bom-ref": "markdown-it-py-13@4.2.0",
+      "name": "markdown-it-py",
+      "version": "4.2.0",
+      "purl": "pkg:pypi/markdown-it-py@4.2.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "markupsafe-14@3.0.3",
+      "name": "markupsafe",
+      "version": "3.0.3",
+      "purl": "pkg:pypi/markupsafe@3.0.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "mdurl-15@0.1.2",
+      "name": "mdurl",
+      "version": "0.1.2",
+      "purl": "pkg:pypi/mdurl@0.1.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "packaging-16@26.3",
+      "name": "packaging",
+      "version": "26.3",
+      "purl": "pkg:pypi/packaging@26.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pluggy-17@1.6.0",
+      "name": "pluggy",
+      "version": "1.6.0",
+      "purl": "pkg:pypi/pluggy@1.6.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pydantic-18@2.13.4",
+      "name": "pydantic",
+      "version": "2.13.4",
+      "purl": "pkg:pypi/pydantic@2.13.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pydantic-core-19@2.46.4",
+      "name": "pydantic-core",
+      "version": "2.46.4",
+      "purl": "pkg:pypi/pydantic-core@2.46.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pygments-20@2.20.0",
+      "name": "pygments",
+      "version": "2.20.0",
+      "purl": "pkg:pypi/pygments@2.20.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pytest-21@8.4.2",
+      "name": "pytest",
+      "version": "8.4.2",
+      "purl": "pkg:pypi/pytest@8.4.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "rich-22@14.3.4",
+      "name": "rich",
+      "version": "14.3.4",
+      "purl": "pkg:pypi/rich@14.3.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "ruff-23@0.16.3",
+      "name": "ruff",
+      "version": "0.16.3",
+      "purl": "pkg:pypi/ruff@0.16.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "shellingham-24@1.5.4",
+      "name": "shellingham",
+      "version": "1.5.4",
+      "purl": "pkg:pypi/shellingham@1.5.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "tree-sitter-25@0.25.2",
+      "name": "tree-sitter",
+      "version": "0.25.2",
+      "purl": "pkg:pypi/tree-sitter@0.25.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "tree-sitter-javascript-26@0.25.0",
+      "name": "tree-sitter-javascript",
+      "version": "0.25.0",
+      "purl": "pkg:pypi/tree-sitter-javascript@0.25.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "tree-sitter-python-27@0.25.0",
+      "name": "tree-sitter-python",
+      "version": "0.25.0",
+      "purl": "pkg:pypi/tree-sitter-python@0.25.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "tree-sitter-typescript-28@0.23.2",
+      "name": "tree-sitter-typescript",
+      "version": "0.23.2",
+      "purl": "pkg:pypi/tree-sitter-typescript@0.23.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "typer-29@0.27.1",
+      "name": "typer",
+      "version": "0.27.1",
+      "purl": "pkg:pypi/typer@0.27.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "typing-extensions-30@4.16.0",
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "purl": "pkg:pypi/typing-extensions@4.16.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "typing-inspection-31@0.4.4",
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "purl": "pkg:pypi/typing-inspection@0.4.4"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "aegisflow-1@0.1.0",
+      "dependsOn": [
+        "httpx-9@0.28.1",
+        "jinja2-12@3.1.6",
+        "pydantic-18@2.13.4",
+        "pytest-21@8.4.2",
+        "rich-22@14.3.4",
+        "ruff-23@0.16.3",
+        "tree-sitter-25@0.25.2",
+        "tree-sitter-javascript-26@0.25.0",
+        "tree-sitter-python-27@0.25.0",
+        "tree-sitter-typescript-28@0.23.2",
+        "typer-29@0.27.1"
+      ]
+    },
+    {
+      "ref": "annotated-doc-2@0.0.5"
+    },
+    {
+      "ref": "annotated-types-3@0.8.0"
+    },
+    {
+      "ref": "anyio-4@4.14.2",
+      "dependsOn": [
+        "idna-10@3.18",
+        "typing-extensions-30@4.16.0"
+      ]
+    },
+    {
+      "ref": "certifi-5@2026.7.22"
+    },
+    {
+      "ref": "colorama-6@0.4.6"
+    },
+    {
+      "ref": "h11-7@0.16.0"
+    },
+    {
+      "ref": "httpcore-8@1.0.9",
+      "dependsOn": [
+        "certifi-5@2026.7.22",
+        "h11-7@0.16.0"
+      ]
+    },
+    {
+      "ref": "httpx-9@0.28.1",
+      "dependsOn": [
+        "anyio-4@4.14.2",
+        "certifi-5@2026.7.22",
+        "httpcore-8@1.0.9",
+        "idna-10@3.18"
+      ]
+    },
+    {
+      "ref": "idna-10@3.18"
+    },
+    {
+      "ref": "iniconfig-11@2.3.0"
+    },
+    {
+      "ref": "jinja2-12@3.1.6",
+      "dependsOn": [
+        "markupsafe-14@3.0.3"
+      ]
+    },
+    {
+      "ref": "markdown-it-py-13@4.2.0",
+      "dependsOn": [
+        "mdurl-15@0.1.2"
+      ]
+    },
+    {
+      "ref": "markupsafe-14@3.0.3"
+    },
+    {
+      "ref": "mdurl-15@0.1.2"
+    },
+    {
+      "ref": "packaging-16@26.3"
+    },
+    {
+      "ref": "pluggy-17@1.6.0"
+    },
+    {
+      "ref": "pydantic-18@2.13.4",
+      "dependsOn": [
+        "annotated-types-3@0.8.0",
+        "pydantic-core-19@2.46.4",
+        "typing-extensions-30@4.16.0",
+        "typing-inspection-31@0.4.4"
+      ]
+    },
+    {
+      "ref": "pydantic-core-19@2.46.4",
+      "dependsOn": [
+        "typing-extensions-30@4.16.0"
+      ]
+    },
+    {
+      "ref": "pygments-20@2.20.0"
+    },
+    {
+      "ref": "pytest-21@8.4.2",
+      "dependsOn": [
+        "colorama-6@0.4.6",
+        "iniconfig-11@2.3.0",
+        "packaging-16@26.3",
+        "pluggy-17@1.6.0",
+        "pygments-20@2.20.0"
+      ]
+    },
+    {
+      "ref": "rich-22@14.3.4",
+      "dependsOn": [
+        "markdown-it-py-13@4.2.0",
+        "pygments-20@2.20.0"
+      ]
+    },
+    {
+      "ref": "ruff-23@0.16.3"
+    },
+    {
+      "ref": "shellingham-24@1.5.4"
+    },
+    {
+      "ref": "tree-sitter-25@0.25.2"
+    },
+    {
+      "ref": "tree-sitter-javascript-26@0.25.0"
+    },
+    {
+      "ref": "tree-sitter-python-27@0.25.0"
+    },
+    {
+      "ref": "tree-sitter-typescript-28@0.23.2"
+    },
+    {
+      "ref": "typer-29@0.27.1",
+      "dependsOn": [
+        "annotated-doc-2@0.0.5",
+        "colorama-6@0.4.6",
+        "rich-22@14.3.4",
+        "shellingham-24@1.5.4"
+      ]
+    },
+    {
+      "ref": "typing-extensions-30@4.16.0"
+    },
+    {
+      "ref": "typing-inspection-31@0.4.4",
+      "dependsOn": [
+        "typing-extensions-30@4.16.0"
+      ]
+    }
+  ]
+}

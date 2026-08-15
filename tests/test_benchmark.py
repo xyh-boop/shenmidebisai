@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
+import aegisflow.benchmark as benchmark_module
 from aegisflow.benchmark import load_ground_truth, score_benchmark
 from aegisflow.contracts import (
     EvidenceEdge,
@@ -178,6 +179,15 @@ def test_load_ground_truth_rejects_invalid_manifest(tmp_path) -> None:
         load_ground_truth(path)
 
 
+def test_load_ground_truth_rejects_oversized_control_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(benchmark_module, "MAX_GROUND_TRUTH_BYTES", 64)
+    path = tmp_path / "oversized-truth.json"
+    path.write_bytes(b'{"schema_version":"1.0","expected":[]}' + b" " * 64)
+
+    with pytest.raises(ValueError, match="exceeds the configured byte limit"):
+        load_ground_truth(path)
+
+
 def test_scoring_uses_maximum_one_to_one_location_matching() -> None:
     broad = make_finding(path="src/app.py", start=5, end=25)
     narrow = make_finding(path="src/app.py", start=9, end=11)
@@ -190,7 +200,7 @@ def test_scoring_uses_maximum_one_to_one_location_matching() -> None:
     assert result.precision == 1.0
     assert result.recall == 1.0
     assert result.f1 == 1.0
-    assert result.false_positive_rate == 0.0
+    assert result.false_discovery_rate == 0.0
     assert result.missed_truth_ids == []
 
 
@@ -209,7 +219,7 @@ def test_scoring_requires_matching_rule_path_and_overlap() -> None:
     assert result.precision == 0.0
     assert result.recall == 0.0
     assert result.f1 == 0.0
-    assert result.false_positive_rate == 1.0
+    assert result.false_discovery_rate == 1.0
 
 
 def test_scoring_deduplicates_fingerprints_and_ignores_rejected() -> None:
@@ -228,6 +238,19 @@ def test_scoring_deduplicates_fingerprints_and_ignores_rejected() -> None:
     assert result.missed_truth_ids == ["truth-b"]
 
 
+def test_false_discovery_rate_uses_predicted_positives_as_denominator() -> None:
+    findings = [
+        make_finding(path="src/app.py", start=10, end=10),
+        make_finding(path="false.py", start=1, end=1),
+    ]
+
+    result = score_benchmark(make_report(findings), truth_fixture())
+
+    assert result.true_positives == 1
+    assert result.false_positives == 1
+    assert result.false_discovery_rate == 0.5
+
+
 def test_zero_safe_metrics_for_empty_report_and_truth() -> None:
     result = score_benchmark(make_report([]), GroundTruth(schema_version="1.0", expected=[]))
 
@@ -237,4 +260,4 @@ def test_zero_safe_metrics_for_empty_report_and_truth() -> None:
     assert result.precision == 0.0
     assert result.recall == 0.0
     assert result.f1 == 0.0
-    assert result.false_positive_rate == 0.0
+    assert result.false_discovery_rate == 0.0

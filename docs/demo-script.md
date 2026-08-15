@@ -22,11 +22,11 @@ aegisflow scan .\benchmarks\fixtures --mode offline --format html --output .\art
 aegisflow benchmark .\benchmarks\fixtures --ground-truth .\benchmarks\ground_truth.json --output .\artifacts\benchmark.json
 ```
 
-展示 Precision、Recall、F1、假阳性率、扫描行数、耗时和首个高危发现时间。解释独立真值清单与成对安全近似文件，并明确该分数仅适用于当前版本化样本集。
+展示 Precision、Recall、F1、错误发现率 FDR（`FP / (TP + FP)`）、扫描行数、耗时和首个高危发现时间。说明没有 TN 定义时不计算经典 FPR；解释独立真值清单与成对安全近似文件，并明确该分数仅适用于当前版本化样本集。
 
 ## 3:20-4:20：Agent 工作流与成本控制
 
-展示 `config/model.example.toml`。解释路由：本地证据完整时会离线确认；证据明确安全时会拒绝；只有高风险且存在歧义的候选才会进入 Verifier、Critic 和 Arbiter 复核。说明请求数、令牌、上下文和美元预算均为硬限制。未经明确批准且没有可用凭据时，不要启用真实服务提供方。
+展示 `config/model.example.toml`。解释路由：本地证据完整时会离线确认；证据明确安全时会拒绝；只有高风险且存在歧义的候选才会进入 Verifier、Critic 和 Arbiter 复核。说明请求数、令牌、上下文和美元预算均为不可退款的本地硬限制，provider 自报 usage 只作观测。公网 endpoint 必须为 HTTPS，明文 HTTP 只允许显式开启的 loopback 调试；没有可用凭据时，非严格模式保留 `needs_review`，严格模式使用 `--require-agent-success` 展示退出码 `4`。外发内容仅做尽力过滤，不演示为完整脱敏。
 
 ## 4:20-5:00：可重复性与范围
 

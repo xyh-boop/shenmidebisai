@@ -14,11 +14,25 @@ from aegisflow.contracts import (
     ReportEnvelope,
 )
 
+MAX_GROUND_TRUTH_BYTES = 8 * 1024 * 1024
+
+
+class GroundTruthLoadError(ValueError):
+    """Raised when a ground-truth manifest cannot be safely loaded."""
+
 
 def load_ground_truth(path: Path) -> GroundTruth:
     """Load and validate a UTF-8 ground-truth manifest."""
 
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    with path.open("rb") as handle:
+        raw = handle.read(MAX_GROUND_TRUTH_BYTES + 1)
+    if len(raw) > MAX_GROUND_TRUTH_BYTES:
+        raise GroundTruthLoadError("ground-truth manifest exceeds the configured byte limit")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise GroundTruthLoadError("ground-truth manifest is not valid UTF-8") from exc
+    payload = json.loads(text)
     return GroundTruth.model_validate(payload)
 
 
@@ -95,7 +109,7 @@ def score_benchmark(report: ReportEnvelope, truth: GroundTruth) -> BenchmarkResu
         precision=precision,
         recall=recall,
         f1=f1,
-        false_positive_rate=_ratio(false_positives, true_positives + false_positives),
+        false_discovery_rate=_ratio(false_positives, true_positives + false_positives),
         matched_finding_ids=[
             finding.finding_id
             for index, finding in enumerate(findings)
@@ -109,4 +123,9 @@ def score_benchmark(report: ReportEnvelope, truth: GroundTruth) -> BenchmarkResu
     )
 
 
-__all__ = ["load_ground_truth", "score_benchmark"]
+__all__ = [
+    "MAX_GROUND_TRUTH_BYTES",
+    "GroundTruthLoadError",
+    "load_ground_truth",
+    "score_benchmark",
+]

@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+import os
+import secrets
+import stat
+import tempfile
+from contextlib import suppress
 from pathlib import Path
 from typing import Literal
 
@@ -293,15 +298,16 @@ _HTML_TEMPLATE = r"""<!doctype html>
         <div class="datum"><dt>输入 Token</dt><dd>{{ report.metrics.prompt_tokens }}</dd></div>
         <div class="datum"><dt>输出 Token</dt><dd>{{ report.metrics.completion_tokens }}</dd></div>
         <div class="datum"><dt>预估成本</dt><dd>{{ "%.6f"|format(report.metrics.estimated_cost_usd) }} 美元</dd></div>
+        {% if report.metrics.false_discovery_rate is not none %}<div class="datum"><dt>错误发现率 (FDR)</dt><dd>{{ "%.2f"|format(report.metrics.false_discovery_rate * 100) }}%</dd></div>{% endif %}
       </dl>
     </section>
 
     <section aria-labelledby="findings-heading">
       <div class="section-head">
-        <div><h2 id="findings-heading">漏洞发现</h2><p class="section-note">每个候选项的验证证据与决策记录。</p></div>
+        <div><h2 id="findings-heading">最终发现</h2><p class="section-note">仅列出已确认、疑似或待人工复核的候选项。</p></div>
       </div>
-      {% if report.findings %}
-      {% for finding in report.findings %}
+      {% if final_findings %}
+      {% for finding in final_findings %}
       <article class="finding severity-{{ finding.severity }}" id="finding-{{ finding.finding_id }}">
         <div class="finding-head">
           <div class="finding-title">
@@ -371,7 +377,48 @@ _HTML_TEMPLATE = r"""<!doctype html>
         </div>
       </article>
       {% endfor %}
-      {% else %}<div class="empty">本次运行未记录漏洞发现。</div>{% endif %}
+      {% else %}<div class="empty">本次运行没有最终发现。</div>{% endif %}
+    </section>
+
+    <section aria-labelledby="rejected-heading">
+      <div class="section-head">
+        <div><h2 id="rejected-heading">已排除候选</h2><p class="section-note">单独列出被本地证据或一致反证排除的候选项。</p></div>
+      </div>
+      {% if rejected_findings %}
+      {% for finding in rejected_findings %}
+      <article class="finding severity-{{ finding.severity }}" id="finding-{{ finding.finding_id }}">
+        <div class="finding-head">
+          <div class="finding-title">
+            <h3>{{ finding.title }}</h3>
+            <p>{{ finding.path }}:{{ finding.start_line }}{% if finding.end_line != finding.start_line %}-{{ finding.end_line }}{% endif %} | {{ finding.rule_id }} | {{ finding.cwe }}</p>
+          </div>
+          <div class="tags" aria-label="排除状态">
+            <span class="tag {{ finding.severity }}">{{ severity_labels[finding.severity] }}</span>
+            <span class="tag">{{ disposition_labels[finding.disposition] }}</span>
+          </div>
+        </div>
+        <div class="finding-body">
+          <div class="finding-block">
+            <h4>排除反证</h4>
+            {% if finding.counter_references %}
+            <ul class="edge-list">{% for reference in finding.counter_references %}<li><code>{{ reference }}</code></li>{% endfor %}</ul>
+            {% else %}<div class="empty">未记录模型反证节点；请检查本地路由决策。</div>{% endif %}
+          </div>
+          <div class="finding-block">
+            <h4>排除决策</h4>
+            <ol class="decision-list">
+            {% for decision in finding.decisions %}
+              <li class="decision verdict-{{ decision.verdict }}">
+                <div class="decision-head"><strong>{{ agent_role_labels[decision.agent] }}</strong><span class="decision-meta">{{ verdict_labels[decision.verdict] }} | {{ "%.0f"|format(decision.confidence * 100) }}% | {{ decision.latency_ms }} 毫秒</span></div>
+                <p>{{ decision.rationale }}</p>
+              </li>
+            {% endfor %}
+            </ol>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+      {% else %}<div class="empty">本次运行没有已排除候选。</div>{% endif %}
     </section>
 
     <section aria-labelledby="diagnostics-heading">
@@ -411,8 +458,9 @@ def render_json(report: ReportEnvelope) -> str:
 def _html_view(report: ReportEnvelope) -> dict[str, object]:
     data = report.canonical_data()
     severity_counts = {severity: 0 for severity in _SEVERITY_ORDER}
+    final_findings: list[dict[str, object]] = []
+    rejected_findings: list[dict[str, object]] = []
     for finding in data["findings"]:
-        severity_counts[finding["severity"]] += 1
         supporting = {
             node_id
             for decision in finding["decisions"]
@@ -425,8 +473,15 @@ def _html_view(report: ReportEnvelope) -> dict[str, object]:
         }
         finding["supporting_references"] = sorted(supporting)
         finding["counter_references"] = sorted(counter)
+        if finding["disposition"] == "rejected":
+            rejected_findings.append(finding)
+        else:
+            severity_counts[finding["severity"]] += 1
+            final_findings.append(finding)
     return {
         "report": data,
+        "final_findings": final_findings,
+        "rejected_findings": rejected_findings,
         "severity_counts": severity_counts,
         "severity_order": _SEVERITY_ORDER,
         "severity_labels": _SEVERITY_LABELS,
@@ -446,6 +501,199 @@ def render_html(report: ReportEnvelope) -> str:
     return _TEMPLATE.render(**_html_view(report))
 
 
+_FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+
+
+def _is_reparse_point(file_stat: os.stat_result) -> bool:
+    return bool(getattr(file_stat, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _same_file(first: os.stat_result, second: os.stat_result) -> bool:
+    return (first.st_dev, first.st_ino) == (second.st_dev, second.st_ino)
+
+
+def _validate_path_component(path: Path, *, directory: bool) -> os.stat_result:
+    current = path.stat(follow_symlinks=False)
+    if stat.S_ISLNK(current.st_mode) or _is_reparse_point(current):
+        raise OSError("output path contains a symbolic link or reparse point")
+    if directory and not stat.S_ISDIR(current.st_mode):
+        raise OSError("output parent component is not a directory")
+    return current
+
+
+def _absolute_lexical(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def _validate_existing_output_chain(output: Path) -> Path:
+    absolute = _absolute_lexical(output)
+    if not absolute.name:
+        raise OSError("output target must be a file path")
+    current = Path(absolute.anchor)
+    _validate_path_component(current, directory=True)
+    parts = absolute.parts[1:]
+    for index, part in enumerate(parts):
+        current /= part
+        try:
+            _validate_path_component(current, directory=index < len(parts) - 1)
+        except FileNotFoundError:
+            break
+    return absolute
+
+
+def _supports_directory_handle_io() -> bool:
+    return (
+        os.open in os.supports_dir_fd
+        and os.replace in os.supports_dir_fd
+        and os.unlink in os.supports_dir_fd
+    )
+
+
+def _create_output_directory(path: Path) -> None:
+    parent_before = _validate_path_component(path.parent, directory=True)
+    if os.open in os.supports_dir_fd and os.mkdir in os.supports_dir_fd:
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path.parent, flags)
+        try:
+            if not _same_file(parent_before, os.fstat(descriptor)):
+                raise OSError("output parent changed before directory creation")
+            os.mkdir(path.name, dir_fd=descriptor)
+        finally:
+            os.close(descriptor)
+    else:
+        os.mkdir(path)
+    parent_after = _validate_path_component(path.parent, directory=True)
+    if not _same_file(parent_before, parent_after):
+        raise OSError("output parent changed during directory creation")
+    _validate_path_component(path, directory=True)
+
+
+def _prepare_output_parent(output: Path) -> tuple[Path, os.stat_result]:
+    absolute = _absolute_lexical(output)
+    if not absolute.name:
+        raise OSError("output target must be a file path")
+    current = Path(absolute.anchor)
+    _validate_path_component(current, directory=True)
+    parts = absolute.parts[1:-1]
+    for part in parts:
+        current /= part
+        try:
+            _validate_path_component(current, directory=True)
+        except FileNotFoundError:
+            _create_output_directory(current)
+    parent_stat = _validate_path_component(absolute.parent, directory=True)
+    try:
+        target_stat = _validate_path_component(absolute, directory=False)
+    except FileNotFoundError:
+        target_stat = None
+    if target_stat is not None and not stat.S_ISREG(target_stat.st_mode):
+        raise OSError("output target must be a regular file")
+    return absolute, parent_stat
+
+
+def _safe_write_text(output: Path, content: str) -> None:
+    """Write through a same-directory temporary file after link checks."""
+
+    use_directory_handle = _supports_directory_handle_io()
+    absolute, parent_before = _prepare_output_parent(output)
+    descriptor = -1
+    parent_descriptor = -1
+    temporary_name: str | None = None
+    temporary_path: Path | None = None
+    try:
+        if use_directory_handle:
+            directory_flags = (
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+            )
+            parent_descriptor = os.open(absolute.parent, directory_flags)
+            if not _same_file(parent_before, os.fstat(parent_descriptor)):
+                raise OSError("output parent changed before temporary file creation")
+            temporary_name = f".aegisflow-{secrets.token_hex(16)}.tmp"
+            temporary_flags = (
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+            )
+            descriptor = os.open(
+                temporary_name,
+                temporary_flags,
+                0o600,
+                dir_fd=parent_descriptor,
+            )
+        else:
+            descriptor, temporary_file = tempfile.mkstemp(
+                prefix=".aegisflow-",
+                suffix=".tmp",
+                dir=absolute.parent,
+            )
+            temporary_path = Path(temporary_file)
+            parent_after_temp = _validate_path_component(absolute.parent, directory=True)
+            if not _same_file(parent_before, parent_after_temp):
+                raise OSError("output parent changed after temporary file creation")
+
+        temporary_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(temporary_stat.st_mode) or _is_reparse_point(temporary_stat):
+            raise OSError("temporary output is not a regular file")
+        with os.fdopen(descriptor, "wb") as handle:
+            descriptor = -1
+            handle.write(content.encode("utf-8"))
+            handle.flush()
+            os.fsync(handle.fileno())
+
+        _validate_existing_output_chain(absolute)
+        parent_after = _validate_path_component(absolute.parent, directory=True)
+        if not _same_file(parent_before, parent_after):
+            raise OSError("output parent changed during report generation")
+        try:
+            target_stat = _validate_path_component(absolute, directory=False)
+        except FileNotFoundError:
+            target_stat = None
+        if target_stat is not None and not stat.S_ISREG(target_stat.st_mode):
+            raise OSError("output target changed to a non-regular file")
+
+        if parent_descriptor >= 0:
+            if not _same_file(parent_before, os.fstat(parent_descriptor)):
+                raise OSError("output directory handle changed before atomic replacement")
+            if temporary_name is None:
+                raise OSError("temporary output name is unavailable")
+            os.replace(
+                temporary_name,
+                absolute.name,
+                src_dir_fd=parent_descriptor,
+                dst_dir_fd=parent_descriptor,
+            )
+            temporary_name = None
+        else:
+            if temporary_path is None:
+                raise OSError("temporary output path is unavailable")
+            os.replace(temporary_path, absolute)
+            temporary_path = None
+
+        final = _validate_path_component(absolute, directory=False)
+        if not stat.S_ISREG(final.st_mode):
+            raise OSError("output replacement did not produce a regular file")
+        parent_final = _validate_path_component(absolute.parent, directory=True)
+        if not _same_file(parent_before, parent_final):
+            raise OSError("output parent changed during atomic replacement")
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        if temporary_name is not None and parent_descriptor >= 0:
+            with suppress(FileNotFoundError):
+                os.unlink(temporary_name, dir_fd=parent_descriptor)
+        if temporary_path is not None:
+            current_parent: os.stat_result | None = None
+            with suppress(OSError):
+                current_parent = _validate_path_component(absolute.parent, directory=True)
+            if current_parent is not None and _same_file(parent_before, current_parent):
+                with suppress(FileNotFoundError):
+                    os.unlink(temporary_path)
+        if parent_descriptor >= 0:
+            os.close(parent_descriptor)
+
+
 def write_report(
     report: ReportEnvelope,
     output: Path,
@@ -458,8 +706,7 @@ def write_report(
         renderer = renderers[format]
     except KeyError as error:
         raise ValueError("format must be 'json' or 'html'") from error
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(renderer(report), encoding="utf-8", newline="\n")
+    _safe_write_text(output, renderer(report))
 
 
 __all__ = ["render_html", "render_json", "write_report"]

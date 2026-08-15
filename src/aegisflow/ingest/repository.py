@@ -74,6 +74,10 @@ class IngestResult:
     def lines_scanned(self) -> int:
         return sum(source.line_count for source in self.sources)
 
+    @property
+    def complete(self) -> bool:
+        return not any(item.level == DiagnosticLevel.ERROR for item in self.diagnostics)
+
 
 def _is_reparse_point(file_stat: os.stat_result) -> bool:
     attributes = getattr(file_stat, "st_file_attributes", 0)
@@ -101,7 +105,7 @@ def _diagnostic(
     return Diagnostic(code=code, level=level, message=message, path=path)
 
 
-def _read_bounded_file(path: Path, expected: os.stat_result, limit: int) -> bytes:
+def _read_bounded_file(path: Path, expected: os.stat_result, limit: int) -> tuple[bytes, int]:
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags)
     try:
@@ -120,15 +124,18 @@ def _read_bounded_file(path: Path, expected: os.stat_result, limit: int) -> byte
             opened.st_size,
             opened.st_mtime_ns,
         )
+        actual_size = final.st_size
+        if actual_size > limit or len(data) > limit:
+            return data, actual_size
         if not unchanged or len(data) != final.st_size:
             raise OSError("file changed while it was being read")
-        return data
+        return data, actual_size
     finally:
         os.close(descriptor)
 
 
-def _diagnostic_sort_key(item: Diagnostic) -> tuple[str, int, str, str]:
-    return (item.path or "", item.line or 0, item.level.value, item.code)
+def _diagnostic_sort_key(item: Diagnostic) -> tuple[str, int, str, str, str]:
+    return (item.path or "", item.line or 0, item.level.value, item.code, item.message)
 
 
 def discover_repository(root: Path, limits: ScanLimits) -> IngestResult:
@@ -149,7 +156,11 @@ def discover_repository(root: Path, limits: ScanLimits) -> IngestResult:
     sources: list[SourceFile] = []
     diagnostics: list[Diagnostic] = []
     candidate_count = 0
+    entries_seen = 0
+    directories_seen = 1
     processed_bytes = 0
+    entry_limit_reached = False
+    directory_limit_reached = False
     file_limit_reached = False
 
     def add_skip(code: str, message: str, path: Path, *, error: bool = False) -> None:
@@ -162,12 +173,34 @@ def discover_repository(root: Path, limits: ScanLimits) -> IngestResult:
             )
         )
 
-    def visit(directory: Path, depth: int) -> None:
-        nonlocal candidate_count, file_limit_reached, processed_bytes
+    def bounded_entries(directory: Path) -> list[Path]:
+        nonlocal entries_seen, entry_limit_reached
+        entries: list[Path] = []
         try:
-            entries = sorted(
-                directory.iterdir(), key=lambda item: (item.name.casefold(), item.name)
-            )
+            with os.scandir(directory) as iterator:
+                for raw_entry in iterator:
+                    if entries_seen >= limits.max_entries:
+                        if not entry_limit_reached:
+                            relative = (
+                                None
+                                if directory == resolved_root
+                                else _relative_path(directory, resolved_root)
+                            )
+                            diagnostics.append(
+                                _diagnostic(
+                                    "max_entries_exceeded",
+                                    DiagnosticLevel.ERROR,
+                                    (
+                                        "repository entry count exceeds maximum of "
+                                        f"{limits.max_entries}"
+                                    ),
+                                    relative,
+                                )
+                            )
+                        entry_limit_reached = True
+                        break
+                    entries_seen += 1
+                    entries.append(Path(raw_entry.path))
         except OSError as exc:
             relative = (
                 None if directory == resolved_root else _relative_path(directory, resolved_root)
@@ -180,13 +213,37 @@ def discover_repository(root: Path, limits: ScanLimits) -> IngestResult:
                     relative,
                 )
             )
-            return
+        return sorted(entries, key=lambda item: (item.name.casefold(), item.name))
+
+    def visit(directory: Path, depth: int) -> None:
+        nonlocal candidate_count, directories_seen
+        nonlocal directory_limit_reached, file_limit_reached, processed_bytes
+        entries = bounded_entries(directory)
 
         for entry in entries:
             if file_limit_reached:
                 return
 
             lexical_path = _relative_path(entry, resolved_root)
+            try:
+                path_bytes = len(lexical_path.encode("utf-8"))
+            except UnicodeEncodeError:
+                diagnostics.append(
+                    _diagnostic(
+                        "invalid_path_encoding",
+                        DiagnosticLevel.ERROR,
+                        "repository path cannot be represented as UTF-8",
+                    )
+                )
+                continue
+            if path_bytes > limits.max_path_bytes:
+                add_skip(
+                    "max_path_bytes_exceeded",
+                    f"path length exceeds byte limit {limits.max_path_bytes}",
+                    entry,
+                    error=True,
+                )
+                continue
             try:
                 entry_stat = entry.stat(follow_symlinks=False)
             except OSError as exc:
@@ -218,8 +275,25 @@ def discover_repository(root: Path, limits: ScanLimits) -> IngestResult:
                         "max_depth_exceeded",
                         f"directory exceeds maximum depth of {limits.max_depth}",
                         entry,
+                        error=True,
                     )
                     continue
+                if entry_limit_reached:
+                    continue
+                if directories_seen >= limits.max_directories:
+                    if not directory_limit_reached:
+                        add_skip(
+                            "max_directories_exceeded",
+                            (
+                                "repository directory count exceeds maximum of "
+                                f"{limits.max_directories}"
+                            ),
+                            entry,
+                            error=True,
+                        )
+                    directory_limit_reached = True
+                    continue
+                directories_seen += 1
                 visit(entry, depth + 1)
                 continue
 
@@ -235,7 +309,7 @@ def discover_repository(root: Path, limits: ScanLimits) -> IngestResult:
                 diagnostics.append(
                     _diagnostic(
                         "max_files_exceeded",
-                        DiagnosticLevel.WARNING,
+                        DiagnosticLevel.ERROR,
                         f"source file count exceeds maximum of {limits.max_files}",
                         lexical_path,
                     )
@@ -243,37 +317,35 @@ def discover_repository(root: Path, limits: ScanLimits) -> IngestResult:
                 file_limit_reached = True
                 return
 
-            if entry_stat.st_size > limits.max_file_bytes:
-                add_skip(
-                    "max_file_bytes_exceeded",
-                    f"file size {entry_stat.st_size} exceeds limit {limits.max_file_bytes}",
-                    entry,
-                )
-                continue
-            if processed_bytes + entry_stat.st_size > limits.max_total_bytes:
-                add_skip(
-                    "max_total_bytes_exceeded",
-                    f"accepting file would exceed total byte limit {limits.max_total_bytes}",
-                    entry,
-                )
-                continue
-
-            # Reserve the bytes before I/O so malformed and binary files cannot bypass the budget.
-            processed_bytes += entry_stat.st_size
             try:
-                raw = _read_bounded_file(entry, entry_stat, limits.max_file_bytes)
+                raw, actual_size = _read_bounded_file(entry, entry_stat, limits.max_file_bytes)
             except OSError as exc:
                 add_skip("file_read_error", f"could not safely read file: {exc}", entry, error=True)
                 continue
-            if len(raw) > limits.max_file_bytes:
+            if actual_size > limits.max_file_bytes or len(raw) > limits.max_file_bytes:
                 add_skip(
                     "max_file_bytes_exceeded",
-                    f"file grew beyond limit {limits.max_file_bytes} while being read",
+                    f"actual file size {actual_size} exceeds limit {limits.max_file_bytes}",
                     entry,
+                    error=True,
                 )
                 continue
+            if processed_bytes + actual_size > limits.max_total_bytes:
+                add_skip(
+                    "max_total_bytes_exceeded",
+                    f"actual read bytes would exceed total limit {limits.max_total_bytes}",
+                    entry,
+                    error=True,
+                )
+                continue
+            processed_bytes += actual_size
             if b"\x00" in raw:
-                add_skip("binary_file", "file contains NUL bytes and is treated as binary", entry)
+                add_skip(
+                    "binary_file",
+                    "file contains NUL bytes and is treated as binary",
+                    entry,
+                    error=True,
+                )
                 continue
 
             encoding = "utf-8-sig" if raw.startswith(b"\xef\xbb\xbf") else "utf-8"
@@ -284,6 +356,7 @@ def discover_repository(root: Path, limits: ScanLimits) -> IngestResult:
                     "invalid_utf8",
                     f"file is not valid UTF-8: byte offset {exc.start}",
                     entry,
+                    error=True,
                 )
                 continue
 

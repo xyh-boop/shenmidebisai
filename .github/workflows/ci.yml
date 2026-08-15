@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.13"]
+    steps:
+      # 使用固定版本的官方动作，减少供应链漂移。
+      - name: 检出代码
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: 设置 Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 安装固定版本 uv
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check "uv==0.11.17"
+          uv --version
+
+      - name: 按锁文件同步全部额外依赖
+        shell: bash
+        run: uv sync --locked --all-extras
+
+      - name: 运行完整测试
+        shell: bash
+        run: uv run pytest -q
+
+      - name: Linux 实际覆盖链接安全测试
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run pytest -q tests/test_ingest.py tests/test_cli.py -rs | tee "$RUNNER_TEMP/symlink-tests.log"
+          if grep -q "symbolic links are not available" "$RUNNER_TEMP/symlink-tests.log"; then
+            echo "链接安全测试被跳过，Linux CI 不接受该结果。"
+            exit 1
+          fi
+
+      - name: Ruff 检查
+        shell: bash
+        run: uv run ruff check src tests .github/scripts
+
+      - name: Ruff 格式检查
+        shell: bash
+        run: uv run ruff format --check src tests .github/scripts
+
+      - name: 使用固定版本进行依赖审计
+        shell: bash
+        run: |
+          uv export --format requirements.txt --all-extras --locked --no-emit-project \
+            --output-file "$RUNNER_TEMP/requirements-audit.txt"
+          uvx --from "pip-audit==2.9.0" pip-audit --strict -r "$RUNNER_TEMP/requirements-audit.txt"
+
+      - name: 构建 wheel 和 sdist
+        shell: bash
+        run: uv build --wheel --sdist --out-dir dist
+
+      - name: wheel 安装后 CLI smoke
+        shell: bash
+        run: python .github/scripts/wheel_smoke.py
+
+      - name: 重导出并校验确定性 SBOM
+        shell: bash
+        run: |
+          uv export --format cyclonedx1.5 --all-extras --locked --preview-features sbom-export \
+            --output-file "$RUNNER_TEMP/sbom.cdx.json"
+          python .github/scripts/normalize_sbom.py "$RUNNER_TEMP/sbom.cdx.json"
+          git diff --exit-code -- sbom.cdx.json

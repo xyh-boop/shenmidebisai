@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # 定期更新 GitHub Actions，同时保持动作版本通过审查后再变更。
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+  # 依赖更新应重新生成 uv.lock 和 SBOM，并经过完整 CI。
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly

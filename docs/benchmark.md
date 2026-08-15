@@ -21,8 +21,10 @@
 precision = TP / (TP + FP)
 recall = TP / (TP + FN)
 F1 = 2 * precision * recall / (precision + recall)
-false-positive rate = FP / (TP + FP)
+false_discovery_rate = FP / (TP + FP)
 ```
+
+这里的 `false_discovery_rate` 是错误发现率 FDR，不是经典假阳性率 FPR。当前基准没有定义完整的 TN 单元，因此不计算、不宣称 FPR；没有预测阳性时 FDR 按契约记为 `0.0`。文档中的 FP 仅表示与独立真值不匹配的预测发现。
 
 报告还会记录扫描文件数与行数、耗时、首个高危发现时间、候选与处置结果数量、人工复核数量、提供方请求数、令牌数和预估美元成本。
 

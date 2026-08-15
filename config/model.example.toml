@@ -1,14 +1,35 @@
+require_agent_success = false
+
+[scan]
+max_files = 10000
+max_total_bytes = 104857600
+max_file_bytes = 2097152
+max_depth = 32
+max_entries = 100000
+max_directories = 10000
+max_path_bytes = 4096
+
+[analysis]
+languages = ["javascript", "python", "typescript"]
+enabled_rule_ids = []
+max_snippet_bytes = 8192
+
+[routing]
+auto_confirm_confidence = 0.90
+agent_review_severities = ["critical", "high"]
+
 [provider]
 base_url = "https://api.example.com/v1"
 model = "example-security-review-model"
 api_key_env = "AEGISFLOW_API_KEY"
+# 未设置该环境变量时，非严格模式保留本地 needs_review；严格模式在报告落盘后退出 4。
+allow_insecure_http = false
 timeout_seconds = 30.0
 max_context_bytes = 32768
+max_response_bytes = 1048576
 input_cost_per_million_tokens = 0.0
 output_cost_per_million_tokens = 0.0
 
-[routing]
-auto_confirm_confidence = 0.90
-auto_reject_confidence = 0.95
-agent_review_severities = ["critical", "high"]
-
+# 仅本机调试时可改为以下形式，并显式确认明文传输：
+# base_url = "http://127.0.0.1:8000/v1"
+# allow_insecure_http = true

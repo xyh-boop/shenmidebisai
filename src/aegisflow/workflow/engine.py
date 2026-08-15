@@ -31,6 +31,21 @@ class WorkflowResult:
 
     findings: list[Finding]
     budget: BudgetState | None
+    agent_failures: tuple[str, ...] = ()
+
+
+_PROVIDER_FAILURE_CODES = frozenset(
+    {
+        "AGENT_BUDGET_EXHAUSTED",
+        "AGENT_PROVIDER_CREDENTIAL_UNAVAILABLE",
+        "AGENT_PROVIDER_TIMEOUT",
+        "AGENT_PROVIDER_TRANSPORT_FAILURE",
+        "AGENT_PROVIDER_FAILURE",
+        "AGENT_PROVIDER_UNACCOUNTED_USAGE",
+        "AGENT_RESPONSE_INVALID",
+        "AGENT_RESPONSE_TOO_LARGE",
+    }
+)
 
 
 def _has_complete_evidence(candidate: Candidate) -> bool:
@@ -185,22 +200,36 @@ def _reviewed_finding(
     policy: RoutingPolicy,
     decisions: list[AgentDecision],
 ) -> Finding:
+    verifier = next(
+        (decision for decision in decisions if decision.agent == AgentRole.VERIFIER),
+        None,
+    )
+    critic = next(
+        (decision for decision in decisions if decision.agent == AgentRole.CRITIC),
+        None,
+    )
     arbiter = next(
         (decision for decision in reversed(decisions) if decision.agent == AgentRole.ARBITER),
         None,
+    )
+    rejection_is_evidence_backed = _rejection_is_evidence_backed(
+        candidate,
+        verifier,
+        critic,
+        arbiter,
     )
     if arbiter is None:
         disposition = Disposition.NEEDS_REVIEW
         confidence = candidate.confidence
     elif arbiter.verdict == DecisionVerdict.CONFIRM and _has_complete_evidence(candidate):
         disposition = Disposition.CONFIRMED
-        confidence = arbiter.confidence
-    elif arbiter.verdict == DecisionVerdict.REJECT:
+        confidence = max(candidate.confidence, arbiter.confidence)
+    elif arbiter.verdict == DecisionVerdict.REJECT and rejection_is_evidence_backed:
         disposition = Disposition.REJECTED
-        confidence = arbiter.confidence
+        confidence = max(candidate.confidence, arbiter.confidence)
     else:
         disposition = Disposition.NEEDS_REVIEW
-        confidence = arbiter.confidence
+        confidence = max(candidate.confidence, arbiter.confidence)
 
     route = RoutingDecision(action=RoutingAction.AGENT_REVIEW, reason="high_risk_ambiguous")
     return _make_finding(
@@ -209,6 +238,149 @@ def _reviewed_finding(
         confidence,
         [_local_decision(candidate, route), *decisions],
     )
+
+
+def _rejection_is_evidence_backed(
+    candidate: Candidate,
+    verifier: AgentDecision | None,
+    critic: AgentDecision | None,
+    arbiter: AgentDecision | None,
+) -> bool:
+    if verifier is None or verifier.verdict != DecisionVerdict.NEEDS_REVIEW:
+        return False
+    if critic is None or critic.verdict != DecisionVerdict.REJECT:
+        return False
+    if arbiter is None or arbiter.verdict != DecisionVerdict.REJECT:
+        return False
+    shared_counterevidence = set(critic.counterevidence_node_ids).intersection(
+        arbiter.counterevidence_node_ids
+    )
+    return any(
+        _counterevidence_is_connected(candidate, node_id) for node_id in shared_counterevidence
+    )
+
+
+_COUNTEREVIDENCE_MARKERS = {
+    "AF-CMD-001": frozenset({"shell_argument_quoted", "shlex.quote"}),
+    "AF-PATH-001": frozenset({"safe_basename", "path_containment_check"}),
+    "AF-DESER-001": frozenset({"safe_data_deserializer"}),
+}
+
+
+def _counterevidence_matches_risk_domain(candidate: Candidate, node_id: str) -> bool:
+    node = next((item for item in candidate.nodes if item.node_id == node_id), None)
+    if node is None:
+        return False
+    text = " ".join((node.symbol or "", node.snippet, node.description)).lower()
+    matched_domains = {
+        rule_id
+        for rule_id, markers in _COUNTEREVIDENCE_MARKERS.items()
+        if any(marker in text for marker in markers)
+    }
+    # An unmarked counterexample has no auditable risk-domain binding.  Keep
+    # rejection fail-closed even when its graph edges happen to be valid.
+    return matched_domains == {candidate.rule_id}
+
+
+def _counterevidence_is_connected(candidate: Candidate, node_id: str) -> bool:
+    node_by_id = {node.node_id: node for node in candidate.nodes}
+    counter = node_by_id.get(node_id)
+    if counter is None or counter.kind not in {
+        EvidenceNodeKind.SANITIZER,
+        EvidenceNodeKind.CONSTRAINT,
+    }:
+        return False
+    if counter.path != candidate.path:
+        return False
+    if not _counterevidence_matches_risk_domain(candidate, node_id):
+        return False
+
+    sources = {
+        node.node_id
+        for node in candidate.nodes
+        if node.kind == EvidenceNodeKind.SOURCE and node.path == candidate.path
+    }
+    sinks = {
+        node.node_id
+        for node in candidate.nodes
+        if node.kind == EvidenceNodeKind.SINK
+        and node.path == candidate.path
+        and candidate.start_line <= node.line <= candidate.end_line
+    }
+    all_sinks = {node.node_id for node in candidate.nodes if node.kind == EvidenceNodeKind.SINK}
+    flow_edges = {
+        EvidenceRelation.FLOWS_TO,
+        EvidenceRelation.DERIVED_FROM,
+    }
+    forward: dict[str, set[str]] = {}
+    for edge in candidate.edges:
+        if edge.relation in flow_edges:
+            forward.setdefault(edge.source_id, set()).add(edge.target_id)
+
+    reachable = set(sources)
+    pending = list(sources)
+    while pending:
+        current = pending.pop()
+        if current in all_sinks:
+            continue
+        for target in forward.get(current, set()):
+            if target not in reachable:
+                reachable.add(target)
+                pending.append(target)
+
+    required_relation = (
+        EvidenceRelation.SANITIZED_BY
+        if counter.kind == EvidenceNodeKind.SANITIZER
+        else EvidenceRelation.GUARDED_BY
+    )
+    connected_before = any(
+        edge.target_id == node_id
+        and edge.relation == required_relation
+        and edge.source_id in reachable
+        for edge in candidate.edges
+    )
+    if not connected_before:
+        return False
+
+    after = {node_id}
+    pending = [node_id]
+    while pending:
+        current = pending.pop()
+        if current in sinks:
+            return True
+        for target in forward.get(current, set()):
+            if target not in after:
+                after.add(target)
+                pending.append(target)
+    return bool(after.intersection(sinks))
+
+
+def _review_failure_codes(
+    candidate: Candidate,
+    decisions: Sequence[AgentDecision],
+) -> set[str]:
+    failures = {
+        code
+        for decision in decisions
+        for code in decision.reason_codes
+        if code in _PROVIDER_FAILURE_CODES
+    }
+    arbiter = next(
+        (decision for decision in reversed(decisions) if decision.agent == AgentRole.ARBITER),
+        None,
+    )
+    if arbiter is not None and arbiter.verdict == DecisionVerdict.REJECT:
+        verifier = next(
+            (decision for decision in decisions if decision.agent == AgentRole.VERIFIER),
+            None,
+        )
+        critic = next(
+            (decision for decision in decisions if decision.agent == AgentRole.CRITIC),
+            None,
+        )
+        if not _rejection_is_evidence_backed(candidate, verifier, critic, arbiter):
+            failures.add("AGENT_REJECTION_EVIDENCE_INVALID")
+    return failures
 
 
 def process_candidates(
@@ -231,8 +403,20 @@ def process_candidates(
         ),
     )
     findings: list[Finding] = []
+    agent_failures: set[str] = set()
     for candidate in ordered:
         route = route_candidate(candidate, policy, budget)
+        agent_routed = route.action == RoutingAction.AGENT_REVIEW or (
+            route.action == RoutingAction.NEEDS_REVIEW
+            and route.reason == "agent_budget_unavailable"
+        )
+        if mode == ScanMode.AGENT and agent_routed:
+            if provider is None:
+                agent_failures.add("AGENT_PROVIDER_UNAVAILABLE")
+            if budget is None:
+                agent_failures.add("AGENT_BUDGET_UNAVAILABLE")
+            elif route.reason == "agent_budget_unavailable":
+                agent_failures.add("AGENT_BUDGET_EXHAUSTED")
         can_run_review = (
             route.action == RoutingAction.AGENT_REVIEW
             and mode == ScanMode.AGENT
@@ -240,17 +424,27 @@ def process_candidates(
             and budget is not None
         )
         if can_run_review:
+            try:
+                decisions = review_candidate(candidate, provider, budget)
+            except Exception:
+                decisions = []
+                agent_failures.add("AGENT_PROVIDER_FAILURE")
+            agent_failures.update(_review_failure_codes(candidate, decisions))
             findings.append(
                 _reviewed_finding(
                     candidate,
                     policy,
-                    review_candidate(candidate, provider, budget),
+                    decisions,
                 )
             )
             continue
         findings.append(build_finding(candidate, policy))
 
-    return WorkflowResult(findings=findings, budget=budget)
+    return WorkflowResult(
+        findings=findings,
+        budget=budget,
+        agent_failures=tuple(sorted(agent_failures)),
+    )
 
 
 __all__ = [

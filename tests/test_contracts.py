@@ -3,10 +3,20 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from aegisflow.config import AnalysisConfig, ProviderConfig, ScanLimits
+from aegisflow.config import (
+    AnalysisConfig,
+    AppConfig,
+    ProviderConfig,
+    RoutingPolicy,
+    ScanLimits,
+)
 from aegisflow.contracts import (
     AgentDecision,
+    AnalysisResult,
+    BenchmarkResult,
     BudgetState,
+    Candidate,
+    Diagnostic,
     Disposition,
     EvidenceEdge,
     EvidenceNode,
@@ -63,6 +73,27 @@ def valid_finding(**changes: object) -> Finding:
     }
     values.update(changes)
     return Finding.model_validate(values)
+
+
+def valid_candidate(**changes: object) -> Candidate:
+    finding = valid_finding()
+    values = {
+        "candidate_id": "candidate-python-command",
+        "rule_id": finding.rule_id,
+        "cwe": finding.cwe,
+        "title": finding.title,
+        "severity": finding.severity,
+        "confidence": finding.confidence,
+        "language": finding.language,
+        "path": finding.path,
+        "start_line": finding.start_line,
+        "end_line": finding.end_line,
+        "nodes": finding.nodes,
+        "edges": finding.edges,
+        "remediation": finding.remediation,
+    }
+    values.update(changes)
+    return Candidate.model_validate(values)
 
 
 def metrics() -> RunMetrics:
@@ -182,6 +213,63 @@ def test_finding_id_must_match_the_validated_evidence() -> None:
         valid_finding(finding_id="f" * 64)
 
 
+def test_analysis_result_is_stable_and_rejects_inconsistent_completeness() -> None:
+    later = valid_candidate()
+    earlier_nodes = [EvidenceNode(**{**item.model_dump(), "path": "a.py"}) for item in later.nodes]
+    earlier = valid_candidate(
+        candidate_id="candidate-earlier",
+        path="a.py",
+        nodes=earlier_nodes,
+    )
+    warning = Diagnostic(code="warning", level="warning", message="warning", path="z.py")
+    error = Diagnostic(code="parse_error", level="error", message="parse failed", path="a.py")
+
+    first = AnalysisResult(
+        candidates=[later, earlier], diagnostics=[warning, error], complete=False
+    )
+    second = AnalysisResult(
+        candidates=[earlier, later], diagnostics=[error, warning], complete=False
+    )
+
+    assert [item.candidate_id for item in first.candidates] == [
+        "candidate-earlier",
+        "candidate-python-command",
+    ]
+    assert [item.code for item in first.diagnostics] == ["parse_error", "warning"]
+    assert first.canonical_json() == second.canonical_json()
+
+    with pytest.raises(ValidationError, match="complete analysis may not contain error"):
+        AnalysisResult(candidates=[], diagnostics=[error], complete=True)
+    with pytest.raises(ValidationError, match="incomplete analysis requires an error"):
+        AnalysisResult(candidates=[], diagnostics=[warning], complete=False)
+    with pytest.raises(ValidationError, match="candidate_id values must be unique"):
+        AnalysisResult(candidates=[later, later], diagnostics=[], complete=True)
+
+
+def test_benchmark_contract_uses_false_discovery_rate() -> None:
+    values = {
+        "true_positives": 1,
+        "false_positives": 1,
+        "false_negatives": 0,
+        "precision": 0.5,
+        "recall": 1.0,
+        "f1": 2 / 3,
+        "false_discovery_rate": 0.5,
+    }
+    result = BenchmarkResult.model_validate(values)
+
+    assert result.false_discovery_rate == 0.5
+    assert not hasattr(result, "false_positive_rate")
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        BenchmarkResult.model_validate(
+            {**values, "false_positive_rate": values["false_discovery_rate"]}
+        )
+
+    assert metrics().false_discovery_rate is None
+    with pytest.raises(ValidationError, match="less than or equal to 1"):
+        RunMetrics(**{**metrics().model_dump(), "false_discovery_rate": 1.01})
+
+
 def test_scan_and_analysis_configuration_reject_unsafe_values() -> None:
     with pytest.raises(ValidationError, match="max_file_bytes"):
         ScanLimits(max_total_bytes=10, max_file_bytes=11)
@@ -189,11 +277,100 @@ def test_scan_and_analysis_configuration_reject_unsafe_values() -> None:
     with pytest.raises(ValidationError, match="duplicates"):
         AnalysisConfig(languages=["python", "python"])
 
-    with pytest.raises(ValidationError, match="absolute HTTP"):
+    with pytest.raises(ValidationError, match="absolute HTTPS or loopback HTTP"):
         ProviderConfig(base_url="file:///tmp/provider", model="test")
 
     with pytest.raises(ValidationError, match="must not contain credentials"):
         ProviderConfig(base_url="https://user:secret@example.test/v1", model="test")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("max_files", 10**12),
+        ("max_total_bytes", 10**15),
+        ("max_file_bytes", 10**12),
+        ("max_depth", 10**6),
+        ("max_entries", 10**12),
+        ("max_directories", 10**12),
+        ("max_path_bytes", 10**12),
+    ],
+)
+def test_scan_limits_have_absolute_hard_caps(field: str, value: int) -> None:
+    with pytest.raises(ValidationError, match="less than or equal to"):
+        ScanLimits.model_validate({field: value})
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://localhost:8000/v1",
+        "http://127.0.0.1:8000/v1",
+        "http://[::1]:8000/v1",
+    ],
+)
+def test_provider_allows_only_explicit_loopback_http(base_url: str) -> None:
+    with pytest.raises(ValidationError, match="allow_insecure_http=true"):
+        ProviderConfig(base_url=base_url, model="test")
+
+    config = ProviderConfig(
+        base_url=base_url,
+        model="test",
+        allow_insecure_http=True,
+    )
+    assert config.uses_insecure_http
+
+
+def test_provider_rejects_public_http_and_limits_response_bytes() -> None:
+    with pytest.raises(ValidationError, match="loopback host"):
+        ProviderConfig(
+            base_url="http://api.example.test/v1",
+            model="test",
+            allow_insecure_http=True,
+        )
+
+    secure = ProviderConfig(base_url="https://api.example.test/v1", model="test")
+    assert not secure.uses_insecure_http
+    assert (
+        ProviderConfig(base_url="https://api.example.test/v1/", model="test").base_url
+        == secure.base_url
+    )
+    assert secure.max_response_bytes > 0
+    with pytest.raises(ValidationError, match="less than or equal to"):
+        ProviderConfig(
+            base_url="https://api.example.test/v1",
+            model="test",
+            max_response_bytes=10**12,
+        )
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://alice:hunter2@example.test/v1",
+        "https://example.test/v1?token=hunter2",
+    ],
+)
+def test_provider_validation_errors_do_not_echo_url_secrets(base_url: str) -> None:
+    with pytest.raises(ValidationError) as captured:
+        ProviderConfig(base_url=base_url, model="test")
+
+    rendered = str(captured.value)
+    assert "alice" not in rendered
+    assert "hunter2" not in rendered
+    assert "token=" not in rendered
+
+
+def test_strict_agent_policy_and_removed_dead_routing_field_are_validated() -> None:
+    with pytest.raises(ValidationError, match="provider configuration"):
+        AppConfig(require_agent_success=True)
+
+    provider = ProviderConfig(base_url="https://api.example.test/v1", model="test")
+    strict = AppConfig(provider=provider, require_agent_success=True)
+    assert strict.require_agent_success
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        RoutingPolicy(auto_reject_confidence=0.95)
 
 
 def test_budget_state_checks_all_limits_before_review() -> None:

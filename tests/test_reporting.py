@@ -1,6 +1,8 @@
 import json
 from datetime import UTC, datetime
 
+import pytest
+
 from aegisflow.contracts import (
     AgentDecision,
     Diagnostic,
@@ -100,6 +102,7 @@ def report_fixture(*, hostile: bool = False) -> ReportEnvelope:
             prompt_tokens=120,
             completion_tokens=30,
             estimated_cost_usd=0.0012,
+            false_discovery_rate=0.25,
         ),
         findings=[finding],
         diagnostics=[
@@ -135,6 +138,8 @@ def test_html_is_self_contained_responsive_and_complete() -> None:
     assert "支持证据与反证" in rendered
     assert "修复建议" in rendered
     assert "输入 Token" in rendered
+    assert "错误发现率 (FDR)" in rendered
+    assert "25.00%" in rendered
     assert "诊断信息" in rendered
     assert "高危" in rendered
     assert "已确认" in rendered
@@ -175,6 +180,36 @@ def test_write_report_writes_requested_format(tmp_path) -> None:
     assert html_path.read_text(encoding="utf-8") == render_html(report)
 
 
+def test_write_report_rejects_symlink_output_parent(tmp_path) -> None:
+    report = report_fixture()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    linked_parent = tmp_path / "linked-parent"
+    try:
+        linked_parent.symlink_to(outside, target_is_directory=True)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symbolic links unavailable: {error}")
+
+    with pytest.raises(OSError, match=r"symbolic link|reparse point"):
+        write_report(report, linked_parent / "report.json", "json")
+    assert not (outside / "report.json").exists()
+
+
+def test_write_report_rejects_symlink_output_target(tmp_path) -> None:
+    report = report_fixture()
+    real_target = tmp_path / "real.json"
+    real_target.write_text("keep", encoding="utf-8")
+    linked_target = tmp_path / "report.json"
+    try:
+        linked_target.symlink_to(real_target)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symbolic links unavailable: {error}")
+
+    with pytest.raises(OSError, match=r"symbolic link|reparse point"):
+        write_report(report, linked_target, "json")
+    assert real_target.read_text(encoding="utf-8") == "keep"
+
+
 def test_empty_report_has_explicit_empty_states() -> None:
     values = report_fixture().model_dump()
     values["findings"] = []
@@ -182,5 +217,38 @@ def test_empty_report_has_explicit_empty_states() -> None:
 
     rendered = render_html(ReportEnvelope.model_validate(values))
 
-    assert "本次运行未记录漏洞发现" in rendered
+    assert "本次运行没有最终发现" in rendered
+    assert "本次运行没有已排除候选" in rendered
     assert "未输出诊断信息" in rendered
+
+
+def test_rejected_findings_are_excluded_from_final_severity_and_listed_separately() -> None:
+    report = report_fixture()
+    rejected = report.findings[0].model_dump()
+    rejected_path = "src/rejected.py"
+    for node in rejected["nodes"]:
+        node["path"] = rejected_path
+    rejected.update(
+        finding_id=build_finding_id(
+            rejected["rule_id"],
+            rejected_path,
+            rejected["start_line"],
+            rejected["end_line"],
+            [EvidenceNode.model_validate(node) for node in rejected["nodes"]],
+        ),
+        title="Rejected candidate",
+        disposition="rejected",
+        path=rejected_path,
+    )
+    values = report.model_dump()
+    values["findings"].append(rejected)
+    values["metrics"]["candidates_total"] = 2
+    values["metrics"]["findings_rejected"] = 1
+
+    rendered = render_html(ReportEnvelope.model_validate(values))
+
+    assert '<dt class="high">高危</dt><dd>1</dd>' in rendered
+    assert "最终发现" in rendered
+    assert "已排除候选" in rendered
+    assert "排除反证" in rendered
+    assert rendered.index("Rejected candidate") > rendered.index('id="rejected-heading"')

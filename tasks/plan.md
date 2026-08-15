@@ -108,3 +108,48 @@ python -m ruff format --check .
 aegisflow doctor
 aegisflow benchmark .\benchmarks\fixtures --ground-truth .\benchmarks\ground_truth.json --output .\artifacts\benchmark.json
 ```
+
+## 代码审查整改计划 v2（2026-08-15）
+
+本计划实现 `docs/spec.md` 的“安全与评测整改 v2”。依赖顺序为：先锁定共享契约，再并行修改三个互斥模块，最后由 Orchestrator 统一审查和验收。
+
+```text
+R0 规格、共享 DTO 与配置契约
+  |-- R1 安全输入输出、完整配置、CLI 退出码
+  |-- R2 风险域污点、控制流、路径守卫、歧义路由
+  `-- R3 证据化 Agent、硬预算、结构化截断、报告与指标
+          `-- R4 跨模块集成、中文文档、完整验收
+```
+
+### 锁定契约与文件所有权
+
+- Contract Worker（指定共享契约所有者）：`src/aegisflow/contracts.py`、`src/aegisflow/config.py`、`tests/test_contracts.py`。先完成 `AnalysisResult`、配置硬上限、HTTPS/loopback 与 FDR 字段迁移；不得修改其他代码。
+- Worker A：`src/aegisflow/cli.py`、`src/aegisflow/ingest/**`、`config/model.example.toml`、`tests/test_cli.py`、`tests/test_ingest.py`。实现安全输出、读取完整性、完整配置加载和退出矩阵；不得修改共享契约。
+- Worker B：`src/aegisflow/analyzers/**`、`tests/test_analyzers.py` 及仅用于分析回归的 `tests/fixtures/**`。实现风险域 taint、保守控制流、路径守卫与真实歧义候选；不得修改共享契约。
+- Worker C：`src/aegisflow/providers/**`、`src/aegisflow/workflow/**`、`src/aegisflow/reporting/**`、`src/aegisflow/benchmark/**`、`tests/test_providers.py`、`tests/test_workflow.py`、`tests/test_reporting.py`、`tests/test_benchmark.py`。实现证据门禁、硬预算、结构化截断、指标与摘要；不得修改共享契约。
+- Orchestrator：只负责规格、任务、任务记忆、Worker 审查、冲突协调和最终验证。任何跨所有权修改必须先回报并重新分配。
+
+跨 Worker 的内部接口锁定为：Worker C 在 `WorkflowResult` 增加 `agent_failures: tuple[str, ...]`（默认空元组，元素为稳定的非秘密原因码）；Worker A 只读取该字段，并在 `AppConfig.require_agent_success=True` 且字段非空时映射退出码 `4`。两个 Worker 均不得为此修改共享 Pydantic 契约或对方所有权文件。
+
+接管记录：原 Worker B 在第三波执行期间因外部 Agent 服务余额不足而中断；其已落盘的分析器改动保留。经 Orchestrator 重新分配，已完成的 Worker C 临时接管 `src/aegisflow/analyzers/**` 与 `tests/test_analyzers.py` 的剩余反例修复，直至分析器交叉审查项关闭；这是一次明确的所有权迁移，不改变共享契约。
+
+文档收口所有权：代码门禁通过后，Worker A 临时负责 `README.md` 与 `docs/**`（不改写 `docs/competition-code-review.md` 的原始审查证据，只可追加整改状态），同步 FDR、扫描完整性、严格 Agent、预算和残余风险的中文表述；不得再修改产品代码或测试。
+
+供应链收口所有权：Supply Chain Worker 独占 `.github/**`、`uv.lock` 与根目录 `sbom.cdx.json`。使用现有 `pyproject.toml` 生成带哈希锁文件和 CycloneDX 1.5 SBOM，并建立 Linux/Windows、受支持 Python、pytest/Ruff、wheel 构建安装、CLI smoke、依赖审计与链接安全测试的 CI；不得修改产品代码、测试、文档或 `pyproject.toml`。
+
+最终审查接管记录：发现公共 `write_report` 输出边界、无风险域标记反证、三类内联表达式和 ground-truth 退出码问题后，Worker A 临时接管 `src/aegisflow/cli.py` 与 `tests/test_cli.py` 的退出码修复；Worker C 临时接管 `src/aegisflow/reporting/**`、`src/aegisflow/workflow/**`、`src/aegisflow/analyzers/**` 及对应测试，完成最后四项 P1 的修复。原有 Worker 所有权以本次明确迁移为准。
+
+由于并发上限为三个 Worker，Contract Worker 先完成 R0；其结束并通过契约测试后，原 Agent 复用为 Worker A，并与 Worker B、Worker C 并行。
+
+### 集成检查点
+
+1. R0：`python -m pytest -q tests/test_contracts.py`。
+2. R1/R2/R3：各 Worker 运行其所有权范围内测试和 Ruff。
+3. R4：Orchestrator 审查 diff，解决仅由契约迁移引起的跨模块编译问题，运行完整 pytest/Ruff/doctor/benchmark 和 offline/agent MockTransport CLI 集成测试。
+
+### 风险处理
+
+- Windows 链接权限不足：保留可在 Linux/有权限 Windows 执行的测试，不把 skip 当作已覆盖。
+- 控制流范围过大：采用等价的分支环境与保守 join，不承诺完整跨过程或路径敏感分析。
+- schema 迁移：只迁移审查确认错误的 FDR 字段并同步测试/文档，不增加未经批准的公共字段。
+- 外部赛事证据：独立留出集、授权案例、真实 provider 和官方靶场不在本地代码整改中伪造；最终报告继续明确缺口。

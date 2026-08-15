@@ -124,6 +124,7 @@ class ContractModel(BaseModel):
         extra="forbid",
         validate_assignment=True,
         allow_inf_nan=False,
+        hide_input_in_errors=True,
     )
 
     def canonical_data(self) -> dict[str, Any]:
@@ -229,6 +230,19 @@ def _has_source_to_sink_path(nodes: list[EvidenceNode], edges: list[EvidenceEdge
 
 def _sort_nodes(nodes: list[EvidenceNode]) -> list[EvidenceNode]:
     return sorted(nodes, key=lambda node: (node.path, node.line, node.kind.value, node.node_id))
+
+
+def _sort_candidates(candidates: list[Candidate]) -> list[Candidate]:
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            candidate.path,
+            candidate.start_line,
+            candidate.end_line,
+            candidate.rule_id,
+            candidate.candidate_id,
+        ),
+    )
 
 
 def _sort_edges(edges: list[EvidenceEdge]) -> list[EvidenceEdge]:
@@ -337,6 +351,7 @@ class RunMetrics(ContractModel):
     prompt_tokens: int = Field(ge=0)
     completion_tokens: int = Field(ge=0)
     estimated_cost_usd: float = Field(ge=0.0)
+    false_discovery_rate: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class SourceFile(ContractModel):
@@ -429,6 +444,51 @@ class Diagnostic(ContractModel):
         return normalize_repo_path(value) if value is not None else None
 
 
+def _sort_diagnostics(diagnostics: list[Diagnostic]) -> list[Diagnostic]:
+    return sorted(
+        diagnostics,
+        key=lambda diagnostic: (
+            diagnostic.path or "",
+            diagnostic.line or 0,
+            diagnostic.level.value,
+            diagnostic.code,
+            diagnostic.message,
+        ),
+    )
+
+
+class AnalysisResult(ContractModel):
+    """Complete, deterministically ordered output from source analysis."""
+
+    candidates: list[Candidate]
+    diagnostics: list[Diagnostic]
+    complete: bool
+
+    @field_validator("candidates")
+    @classmethod
+    def sort_and_validate_candidates(cls, value: list[Candidate]) -> list[Candidate]:
+        candidate_ids = [candidate.candidate_id for candidate in value]
+        if len(set(candidate_ids)) != len(candidate_ids):
+            raise ValueError("candidate_id values must be unique")
+        return _sort_candidates(value)
+
+    @field_validator("diagnostics")
+    @classmethod
+    def sort_analysis_diagnostics(cls, value: list[Diagnostic]) -> list[Diagnostic]:
+        return _sort_diagnostics(value)
+
+    @model_validator(mode="after")
+    def validate_completeness(self) -> Self:
+        has_errors = any(
+            diagnostic.level == DiagnosticLevel.ERROR for diagnostic in self.diagnostics
+        )
+        if self.complete and has_errors:
+            raise ValueError("complete analysis may not contain error diagnostics")
+        if not self.complete and not has_errors:
+            raise ValueError("incomplete analysis requires an error diagnostic")
+        return self
+
+
 class RunMetadata(ContractModel):
     run_id: str
     mode: ScanMode
@@ -481,15 +541,7 @@ class ReportEnvelope(ContractModel):
     @field_validator("diagnostics")
     @classmethod
     def sort_diagnostics(cls, value: list[Diagnostic]) -> list[Diagnostic]:
-        return sorted(
-            value,
-            key=lambda diagnostic: (
-                diagnostic.path or "",
-                diagnostic.line or 0,
-                diagnostic.level.value,
-                diagnostic.code,
-            ),
-        )
+        return _sort_diagnostics(value)
 
 
 class GroundTruthFinding(ContractModel):
@@ -535,7 +587,7 @@ class BenchmarkResult(ContractModel):
     precision: float = Field(ge=0.0, le=1.0)
     recall: float = Field(ge=0.0, le=1.0)
     f1: float = Field(ge=0.0, le=1.0)
-    false_positive_rate: float = Field(ge=0.0, le=1.0)
+    false_discovery_rate: float = Field(ge=0.0, le=1.0)
     matched_finding_ids: list[str] = Field(default_factory=list)
     missed_truth_ids: list[str] = Field(default_factory=list)
 
@@ -588,6 +640,7 @@ class BudgetState(ContractModel):
 __all__ = [
     "AgentDecision",
     "AgentRole",
+    "AnalysisResult",
     "BenchmarkResult",
     "BudgetState",
     "Candidate",
